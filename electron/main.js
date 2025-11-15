@@ -71,6 +71,60 @@ app.whenReady().then(() => {
     return true
   })
 
+  ipcMain.handle('get-icon-preview', async (_e, iconPath) => {
+    try {
+      if (!iconPath) return { ok: false, dataUrl: '', size: 0 }
+      if (!fs.existsSync(iconPath)) return { ok: false, dataUrl: '', size: 0 }
+      const buf = fs.readFileSync(iconPath)
+      const b64 = buf.toString('base64')
+      const dataUrl = `data:image/x-icon;base64,${b64}`
+      return { ok: true, dataUrl, size: buf.length }
+    } catch {
+      return { ok: false, dataUrl: '', size: 0 }
+    }
+  })
+
+  ipcMain.handle('get-folder-preview', async (_e, folderPath) => {
+    try {
+      if (!folderPath) return { ok: false }
+      const exists = fs.existsSync(folderPath)
+      if (!exists) return { ok: false }
+      const desktopIni = path.join(folderPath, 'desktop.ini')
+      const hasDesktopIni = fs.existsSync(desktopIni)
+      const folderIco = path.join(folderPath, '.folder.ico')
+      const hasFolderIco = fs.existsSync(folderIco)
+      let iconFile = ''
+      if (hasFolderIco) {
+        iconFile = folderIco
+      } else if (hasDesktopIni) {
+        try {
+          const ini = fs.readFileSync(desktopIni, { encoding: 'utf8' })
+          const match = ini.match(/IconFile\s*=\s*(.*)/i)
+          if (match && match[1]) {
+            const raw = match[1].trim()
+            iconFile = path.isAbsolute(raw) ? raw : path.join(folderPath, raw)
+          }
+        } catch {}
+      }
+      let dataUrl = ''
+      if (iconFile && fs.existsSync(iconFile)) {
+        try {
+          const buf = fs.readFileSync(iconFile)
+          dataUrl = `data:image/x-icon;base64,${buf.toString('base64')}`
+        } catch {}
+      }
+      return {
+        ok: true,
+        hasDesktopIni,
+        hasFolderIco,
+        iconPath: iconFile,
+        iconDataUrl: dataUrl
+      }
+    } catch {
+      return { ok: false }
+    }
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
