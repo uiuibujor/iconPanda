@@ -1,0 +1,11 @@
+appId: com.icon.helper
+productName: 图标替换助手
+files:
+  - dist/**
+  - electron/**
+asar: false
+directories:
+  output: release
+win:
+  target:
+    - nsis
