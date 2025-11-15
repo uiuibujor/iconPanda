@@ -1,17 +1,29 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import clsx from 'clsx'
-import { Folder, Image, Settings, Search, Star, Grid3x3, List, Clock, Sparkles, Heart, Plus } from 'lucide-react'
+import { Folder, Settings, Search, Sparkles, Plus, Minus, Maximize, Square, X, Check } from 'lucide-react'
 
 declare global {
   interface Window {
     api: {
       pickFolder: () => Promise<string>
+      pickFolders: () => Promise<string[]>
       pickIcon: () => Promise<string>
       applyIcon: (folder: string, icon: string) => Promise<boolean>
       getIconPreview: (iconPath: string) => Promise<{ ok: boolean; dataUrl: string }>
       getFolderPreview: (
         folderPath: string
       ) => Promise<{ ok: boolean; hasDesktopIni: boolean; hasFolderIco: boolean; iconPath: string; iconDataUrl: string }>
+      getIconLibraryPath: () => Promise<{ ok: boolean; path: string }>
+      chooseIconLibraryFolder: () => Promise<{ ok: boolean; path: string }>
+      listIcons: () => Promise<{ ok: boolean; items: { name: string; path: string }[] }>
+      importIcon: (srcPath: string) => Promise<{ ok: boolean; dest: string }>
+      openIconLibraryFolder: () => Promise<{ ok: boolean }>
+      resetIconLibraryPath: () => Promise<{ ok: boolean; path?: string }>
+      restoreIcon: (folder: string) => Promise<boolean>
+      windowMinimize: () => Promise<boolean>
+      windowToggleMaximize: () => Promise<boolean>
+      windowIsMaximized: () => Promise<boolean>
+      windowClose: () => Promise<boolean>
     }
   }
 }
@@ -21,26 +33,76 @@ export default function App() {
   const [icon, setIcon] = useState('')
   const [iconPreview, setIconPreview] = useState('')
   const [folderPreview, setFolderPreview] = useState<{ ok: boolean; hasDesktopIni: boolean; hasFolderIco: boolean; iconPath: string; iconDataUrl: string } | null>(null)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedFolderItem, setSelectedFolderItem] = useState<{ name: string; path: string; icon: string; status: '已修改' | '待处理' } | null>(null)
   const [folders, setFolders] = useState<Array<{ name: string; path: string; icon: string; status: '已修改' | '待处理' }>>([
-    { name: 'Projects', path: 'D:\\Projects', icon: '📁', status: '已修改' },
-    { name: 'Documents', path: 'C:\\Users\\Documents', icon: '📄', status: '待处理' },
-    { name: 'Downloads', path: 'C:\\Users\\Downloads', icon: '⬇️', status: '已修改' }
+  //  { name: 'Projects', path: 'D:\\Projects', icon: '📁', status: '已修改' },
+  //  { name: 'Documents', path: 'C:\\Users\\Documents', icon: '📄', status: '待处理' },
+  //  { name: 'Downloads', path: 'C:\\Users\\Downloads', icon: '⬇️', status: '已修改' }
   ])
   const [selectedLibraryIndex, setSelectedLibraryIndex] = useState<number | null>(null)
+  const [libraryIcons, setLibraryIcons] = useState<Array<{ name: string; path: string }>>([])
+  const [thumbs, setThumbs] = useState<Record<string, string>>({})
+  const [folderThumbs, setFolderThumbs] = useState<Record<string, string>>({})
+  const [isMaximized, setIsMaximized] = useState(false)
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('theme')
+      if (saved) return saved === 'dark'
+      return window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false
+    } catch {
+      return false
+    }
+  })
+  const [appliedIcons, setAppliedIcons] = useState<Record<string, string>>({})
 
-  const iconCategories = [
-    { name: '全部', count: 5230 },
-    { name: '收藏', count: 48, icon: Star },
-    { name: '办公', count: 820 },
-    { name: '开发', count: 650 },
-    { name: '设计', count: 540 },
-    { name: '娱乐', count: 430 },
-    { name: '系统', count: 380 },
-    { name: '最近使用', count: 12, icon: Clock }
-  ]
+  const loadLibrary = useCallback(async () => {
+    const res = await window.api.listIcons()
+    if (!res.ok) return
+    setLibraryIcons(res.items)
+  }, [])
+
+  useEffect(() => {
+    loadLibrary()
+  }, [loadLibrary])
+
+  useEffect(() => {
+    let mounted = true
+    window.api.windowIsMaximized?.().then((v) => {
+      if (!mounted) return
+      setIsMaximized(!!v)
+    })
+    return () => { mounted = false }
+  }, [])
+
+  useEffect(() => {
+    const root = document.documentElement
+    if (isDark) root.classList.add('dark')
+    else root.classList.remove('dark')
+    try { localStorage.setItem('theme', isDark ? 'dark' : 'light') } catch {}
+  }, [isDark])
+
+  useEffect(() => {
+    let mounted = true
+    const fetchThumbs = async () => {
+      const pairs = await Promise.all(
+        libraryIcons.map(async (it) => {
+          const p = await window.api.getIconPreview(it.path)
+          return [it.path, p.ok ? p.dataUrl : ''] as const
+        })
+      )
+      if (!mounted) return
+      const map: Record<string, string> = {}
+      pairs.forEach(([k, v]) => { map[k] = v })
+      setThumbs(map)
+    }
+    if (libraryIcons.length) fetchThumbs()
+    else setThumbs({})
+    return () => { mounted = false }
+  }, [libraryIcons])
+
+
 
   const pickFolder = useCallback(async () => {
     const f = await window.api.pickFolder()
@@ -57,15 +119,24 @@ export default function App() {
 
   const pickIcon = useCallback(async () => {
     const i = await window.api.pickIcon()
-    if (i) setIcon(i)
+    if (!i) return
+    const r = await window.api.importIcon(i)
+    if (r.ok) {
+      setIcon(r.dest)
+      loadLibrary()
+    }
   }, [])
 
   const apply = useCallback(async () => {
     const ok = await window.api.applyIcon(folder, icon)
-    alert(ok ? '已应用' : '失败')
+    if (!ok) alert('失败')
     if (ok && selectedFolderItem) {
       setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '已修改' } : p)))
       setSelectedFolderItem((prev) => (prev ? { ...prev, status: '已修改' } : prev))
+      const res = await window.api.getFolderPreview(selectedFolderItem.path)
+      setFolderPreview(res.ok ? res : null)
+      setFolderThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res.ok ? res.iconDataUrl : '' }))
+      setAppliedIcons((prev) => ({ ...prev, [selectedFolderItem.path]: icon }))
     }
   }, [folder, icon, selectedFolderItem])
 
@@ -122,10 +193,29 @@ export default function App() {
     }
   }, [folder])
 
+  useEffect(() => {
+    let mounted = true
+    const run = async () => {
+      const pairs = await Promise.all(
+        folders.map(async (f) => {
+          const r = await window.api.getFolderPreview(f.path)
+          return [f.path, r.ok ? r.iconDataUrl : ''] as const
+        })
+      )
+      if (!mounted) return
+      const map: Record<string, string> = {}
+      pairs.forEach(([k, v]) => { map[k] = v })
+      setFolderThumbs(map)
+    }
+    if (folders.length) run()
+    else setFolderThumbs({})
+    return () => { mounted = false }
+  }, [folders])
+
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800" onDrop={onDrop} onDragOver={onDragOver}>
       <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between px-6 py-3">
+        <div className="flex items-center justify-between px-6 py-3 window-drag" onDoubleClick={async () => { await window.api.windowToggleMaximize?.(); const v = await window.api.windowIsMaximized?.(); setIsMaximized(!!v) }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
               <Folder className="w-6 h-6 text-white" />
@@ -136,8 +226,8 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative">
+          <div className="flex items-center gap-3 no-drag">
+            <div className="relative no-drag">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
@@ -147,9 +237,51 @@ export default function App() {
                 className="pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+            <button
+              onClick={() => {
+                // 功能待开发：设置与图标库目录选择
+                alert('设置：功能待开发')
+              }}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
               <Settings className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
+            <label className="switch" aria-label="主题切换">
+              <input id="theme-toggle-input" type="checkbox" checked={isDark} onChange={() => setIsDark((v) => !v)} />
+              <div className="slider round">
+                <div className="sun-moon">
+                  <svg id="moon-dot-1" className="moon-dot" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                  <svg id="moon-dot-2" className="moon-dot" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                  <svg id="moon-dot-3" className="moon-dot" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                  <svg id="light-ray-1" className="light-ray" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                  <svg id="light-ray-2" className="light-ray" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                  <svg id="light-ray-3" className="light-ray" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                  <svg id="cloud-1" className="cloud-dark" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                  <svg id="cloud-2" className="cloud-dark" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                  <svg id="cloud-3" className="cloud-dark" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                  <svg id="cloud-4" className="cloud-light" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                  <svg id="cloud-5" className="cloud-light" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                  <svg id="cloud-6" className="cloud-light" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+                </div>
+                <div className="stars">
+                  <svg id="star-1" className="star" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+                  <svg id="star-2" className="star" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+                  <svg id="star-3" className="star" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+                  <svg id="star-4" className="star" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+                </div>
+              </div>
+            </label>
+            <div className="flex items-center gap-1">
+              <button onClick={async () => { await window.api.windowMinimize?.() }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                <Minus className="w-4 h-4" />
+              </button>
+              <button onClick={async () => { await window.api.windowToggleMaximize?.(); const v = await window.api.windowIsMaximized?.(); setIsMaximized(!!v) }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                {isMaximized ? <Square className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+              </button>
+              <button onClick={async () => { await window.api.windowClose?.() }} className="p-2 hover:bg-red-100 dark:hover:bg-red-800 rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -175,21 +307,72 @@ export default function App() {
                   )}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-2xl">{f.icon}</span>
+                    {folderThumbs[f.path] ? (
+                      <img src={folderThumbs[f.path]} alt={f.name} className="w-6 h-6 object-contain" />
+                    ) : (
+                      <span className="text-2xl">📁</span>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm text-gray-800 dark:text-white truncate">{f.name}</div>
                       <div className="text-xs text-gray-500 truncate">{f.path}</div>
                     </div>
+                    {selectedFolderItem?.path === f.path ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setFolders((prev) => prev.filter((p) => p.path !== f.path))
+                          setFolder((prev) => (prev === f.path ? '' : prev))
+                          setSelectedFolderItem((prev) => (prev?.path === f.path ? null : prev))
+                          setFolderThumbs((prev) => {
+                            const n = { ...prev }
+                            delete n[f.path]
+                            return n
+                          })
+                        }}
+                        className="ml-2 px-2 py-1 text-xs text-red-600 border border-red-300 dark:border-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        删除
+                      </button>
+                    ) : null}
                   </div>
                   <div className="flex items-center justify-between mt-2">
                     <span className={clsx('text-xs px-2 py-0.5 rounded-full', f.status === '已修改' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400')}>{f.status}</span>
                   </div>
                 </div>
               ))}
+              {folders.length === 0 ? (
+                <div className="text-center text-xs text-gray-500 dark:text-gray-400 py-12">暂无待处理文件夹，点击下方“添加文件夹”或拖拽文件夹到页面</div>
+              ) : null}
             </div>
 
             <button
-              onClick={pickFolder}
+              onClick={async () => {
+                const arr = (await window.api.pickFolders?.()) || []
+                if (!arr.length) {
+                  const f = await window.api.pickFolder()
+                  if (!f) return
+                  const name = f.replace(/\+/g, '/').split('/').filter(Boolean).pop() || 'Folder'
+                  const item = { name, path: f, icon: '📁', status: '待处理' as const }
+                  setFolders((prev) => {
+                    const exists = prev.some((p) => p.path === f)
+                    return exists ? prev : [item, ...prev]
+                  })
+                  setSelectedFolderItem(item)
+                  setFolder(f)
+                  return
+                }
+                const items = arr.map((f) => {
+                  const name = f.replace(/\+/g, '/').split('/').filter(Boolean).pop() || 'Folder'
+                  return { name, path: f, icon: '📁', status: '待处理' as const }
+                })
+                setFolders((prev) => {
+                  const set = new Set(prev.map((p) => p.path))
+                  const merged = items.filter((it) => !set.has(it.path))
+                  return merged.length ? [...merged, ...prev] : prev
+                })
+                setSelectedFolderItem(items[0] || null)
+                setFolder(items[0]?.path || '')
+              }}
               className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"
             >
               <Plus className="w-5 h-5 text-gray-400" />
@@ -202,56 +385,111 @@ export default function App() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
               <h2 className="text-lg font-bold text-gray-800 dark:text-white">图标库</h2>
-              <div className="flex items-center gap-2">
-                {iconCategories.slice(0, 6).map((cat) => (
-                  <button key={cat.name} className="px-3 py-1.5 text-xs bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-blue-50 hover:border-blue-300 dark:hover:bg-gray-700 transition-colors">
-                    {cat.name}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={clsx('p-2 rounded-lg transition-colors', viewMode === 'grid' ? 'bg-blue-100 dark:bg-blue-900 text-blue-600' : 'hover:bg-gray-100 dark:hover:bg-gray-700')}
-              >
-                <Grid3x3 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={clsx('p-2 rounded-lg transition-colors', viewMode === 'list' ? 'bg-blue-100 dark:bg-blue-900 text-blue-600' : 'hover:bg-gray-100 dark:hover:bg-gray-700')}
-              >
-                <List className="w-4 h-4" />
-              </button>
               <button
                 onClick={pickIcon}
                 className="ml-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 导入图标(.ico)
               </button>
+              <button
+                onClick={async () => {
+                  await window.api.openIconLibraryFolder()
+                }}
+                className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                查看图标库文件夹
+              </button>
+              <button
+                onClick={async () => {
+                  const res = await window.api.resetIconLibraryPath()
+                  if (res.ok) {
+                    await loadLibrary()
+                  }
+                }}
+                className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                🔃刷新
+              </button>
             </div>
           </div>
 
-          <div className={viewMode === 'grid' ? 'grid grid-cols-8 gap-4' : 'space-y-2'}>
-            {[...Array(32)].map((_, i) => (
+          <div className={'flex flex-wrap gap-4'}>
+            {(libraryIcons.length ? libraryIcons.filter((it) => it.name.toLowerCase().includes(searchQuery.toLowerCase())) : []).map((it, i) => (
               <div
-                key={i}
-                onClick={() => setSelectedLibraryIndex(i)}
+                key={it.path}
+                onClick={() => {
+                  setSelectedLibraryIndex(i)
+                  setIcon(it.path)
+                }}
                 className={clsx(
-                  'group relative bg-white dark:bg-gray-800 rounded-xl p-4 hover:shadow-xl hover:scale-105 transition-all cursor-pointer border border-gray-200 dark:border-gray-700',
+                  'group relative bg-white dark:bg-gray-800 rounded-xl p-4 hover:shadow-xl hover:scale-105 transition-all cursor-pointer border border-gray-200 dark:border-gray-700 w-[120px]',
                   selectedLibraryIndex === i && 'ring-2 ring-blue-500'
                 )}
               >
-                <div className="aspect-square flex items-center justify-center text-4xl mb-2">
-                  {['📁', '📂', '🗂️', '📊', '💼', '🎨', '⚙️', '🎮'][i % 8]}
+                <div className="w-full aspect-square flex items-center justify-center text-4xl mb-2">
+                  {thumbs[it.path] ? (
+                    <img src={thumbs[it.path]} alt={it.name} className="w-12 h-12 object-contain" />
+                  ) : (
+                    <span>📁</span>
+                  )}
                 </div>
-                <div className="text-xs text-center text-gray-600 dark:text-gray-400 truncate">图标 {i + 1}</div>
-                <button className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-700 rounded-full p-1 shadow-lg">
-                  <Heart className="w-3 h-3 text-gray-600 dark:text-gray-300" />
+                <div className="text-xs text-center text-gray-600 dark:text-gray-400 truncate">{it.name}</div>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation()
+                    if (!selectedFolderItem) return
+                    const already = appliedIcons[selectedFolderItem.path] === it.path
+                    if (already) {
+                      const ok = await window.api.restoreIcon(selectedFolderItem.path)
+                      if (ok) {
+                        setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '待处理' } : p)))
+                        const res = await window.api.getFolderPreview(selectedFolderItem.path)
+                        setFolderPreview(res.ok ? res : null)
+                        setFolderThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: '' }))
+                        setAppliedIcons((prev) => {
+                          const n = { ...prev }
+                          delete n[selectedFolderItem.path]
+                          return n
+                        })
+                        setIcon('')
+                      }
+                    } else {
+                      const ok = await window.api.applyIcon(selectedFolderItem.path, it.path)
+                      if (ok) {
+                        setIcon(it.path)
+                        setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '已修改' } : p)))
+                        setSelectedFolderItem((prev) => (prev ? { ...prev, status: '已修改' } : prev))
+                        const res = await window.api.getFolderPreview(selectedFolderItem.path)
+                        setFolderPreview(res.ok ? res : null)
+                        setFolderThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res.ok ? res.iconDataUrl : '' }))
+                        setAppliedIcons((prev) => ({ ...prev, [selectedFolderItem.path]: it.path }))
+                      } else {
+                        alert('应用失败')
+                      }
+                    }
+                  }}
+                  title="应用此图标"
+                  className={clsx(
+                    'absolute top-2 right-2 opacity-0 group-hover:opacity-100 rounded-full transition-opacity transition-colors duration-200 ease-out flex items-center justify-center',
+                    selectedFolderItem && appliedIcons[selectedFolderItem.path] === it.path
+                      ? 'bg-green-500 text-white min-w-[34px] h-6'
+                      : 'bg-transparent border border-blue-600 text-blue-600 min-w-[34px] h-6 text-[9px]'
+                  )}
+                >
+                  {selectedFolderItem && appliedIcons[selectedFolderItem.path] === it.path ? (
+                    <Check className="w-3 h-3 apply-btn-check" />
+                  ) : (
+                    <span className="apply-btn-text">应用</span>
+                  )}
                 </button>
               </div>
             ))}
+            {libraryIcons.length === 0 ? (
+              <div className="col-span-8 text-center text-sm text-gray-500 dark:text-gray-400 py-8">图标库为空，点击“导入图标(.ico)”进行导入</div>
+            ) : null}
           </div>
         </div>
 
@@ -260,10 +498,13 @@ export default function App() {
             <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">实时预览</h3>
 
             <div className="bg-gradient-to-br from-blue-100 to-purple-100 dark:from-gray-700 dark:to-gray-600 rounded-2xl p-8 mb-4 aspect-square flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-8xl mb-4">{selectedFolderItem?.icon || '📁'}</div>
-                <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{selectedFolderItem?.name || '未选择'}</div>
-              </div>
+              {folderPreview?.iconDataUrl ? (
+                <img src={folderPreview.iconDataUrl} alt={selectedFolderItem?.name || ''} className="w-24 h-24 object-contain" />
+              ) : (
+                <div className="text-center">
+                  <div className="text-8xl mb-4">📁</div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -293,9 +534,22 @@ export default function App() {
                   应用图标
                 </button>
                 <button
-                  onClick={() => {
-                    // 功能待开发：还原图标（删除 desktop.ini 与 .folder.ico 并刷新缓存）
-                    alert('还原：功能待开发')
+                  onClick={async () => {
+                    if (!folder) return
+                    const ok = await window.api.restoreIcon(folder)
+                    if (ok) {
+                      setFolders((prev) => prev.map((p) => (p.path === folder ? { ...p, status: '待处理' } : p)))
+                      const res = await window.api.getFolderPreview(folder)
+                      setFolderPreview(res.ok ? res : null)
+                      setFolderThumbs((prev) => ({ ...prev, [folder]: '' }))
+                      setAppliedIcons((prev) => {
+                        const n = { ...prev }
+                        delete n[folder]
+                        return n
+                      })
+                    } else {
+                      alert('还原失败')
+                    }
                   }}
                   className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-medium"
                 >
