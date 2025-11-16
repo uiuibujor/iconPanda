@@ -65,12 +65,13 @@ function createWindow() {
   const __filename = fileURLToPath(import.meta.url)
   const __dirname = path.dirname(__filename)
   const win = new BrowserWindow({
-    width: 1000,
-    height: 700,
+    width: 1200,
+    height: 800,
     minWidth: 1035,
     minHeight: 600,
     frame: false,
     autoHideMenuBar: true,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -81,6 +82,9 @@ function createWindow() {
   try { win.setMenuBarVisibility(false) } catch {}
   const devUrl = 'http://localhost:5173'
   win.loadURL(devUrl)
+  win.once('ready-to-show', () => {
+    try { win.show() } catch {}
+  })
   win.webContents.openDevTools({ mode: 'detach' })
 }
 

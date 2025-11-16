@@ -56,6 +56,7 @@ export default function App() {
     }
   })
   const [appliedIcons, setAppliedIcons] = useState<Record<string, string>>({})
+  const [selectedFolderPaths, setSelectedFolderPaths] = useState<string[]>([])
 
   const loadLibrary = useCallback(async () => {
     const res = await window.api.listIcons()
@@ -307,6 +308,18 @@ export default function App() {
                   )}
                 >
                   <div className="flex items-center gap-2 mb-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedFolderPaths.includes(f.path)}
+                      onChange={(e) => {
+                        e.stopPropagation()
+                        setSelectedFolderPaths((prev) => {
+                          if (e.target.checked) return prev.includes(f.path) ? prev : [...prev, f.path]
+                          return prev.filter((p) => p !== f.path)
+                        })
+                      }}
+                      className="w-4 h-4 border-gray-300 rounded"
+                    />
                     {folderThumbs[f.path] ? (
                       <img src={folderThumbs[f.path]} alt={f.name} className="w-6 h-6 object-contain" />
                     ) : (
@@ -323,6 +336,7 @@ export default function App() {
                           setFolders((prev) => prev.filter((p) => p.path !== f.path))
                           setFolder((prev) => (prev === f.path ? '' : prev))
                           setSelectedFolderItem((prev) => (prev?.path === f.path ? null : prev))
+                          setSelectedFolderPaths((prev) => prev.filter((p) => p !== f.path))
                           setFolderThumbs((prev) => {
                             const n = { ...prev }
                             delete n[f.path]
@@ -586,20 +600,101 @@ export default function App() {
       <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-t border-gray-200 dark:border-gray-700 px-6 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-            <span>已选择: <strong className="text-blue-600 dark:text-blue-400">{selectedFolderItem ? 1 : 0}</strong> 个文件夹</span>
+            <span>已选择: <strong className="text-blue-600 dark:text-blue-400">{selectedFolderPaths.length}</strong> 个文件夹</span>
             <span>|</span>
             <span>共管理: <strong>{folders.length}</strong> 个文件夹</span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                // 功能待开发：批量应用选中文件夹与选中图标
-                alert('批量应用：功能待开发')
+              onClick={async () => {
+                if (!icon || !selectedFolderPaths.length) return
+                const targets = [...selectedFolderPaths]
+                const results: { p: string; ok: boolean; thumb?: string }[] = []
+                for (const p of targets) {
+                  const ok = await window.api.applyIcon(p, icon)
+                  let thumb = ''
+                  if (ok) {
+                    const res = await window.api.getFolderPreview(p)
+                    thumb = res.ok ? res.iconDataUrl : ''
+                  }
+                  results.push({ p, ok, thumb })
+                }
+                const success = results.filter((r) => r.ok).map((r) => r.p)
+                if (success.length) {
+                  setFolders((prev) => prev.map((f) => (success.includes(f.path) ? { ...f, status: '已修改' } : f)))
+                  setFolderThumbs((prev) => {
+                    const n = { ...prev }
+                    results.forEach((r) => {
+                      if (r.ok) n[r.p] = r.thumb || ''
+                    })
+                    return n
+                  })
+                  setAppliedIcons((prev) => {
+                    const n = { ...prev }
+                    success.forEach((p) => { n[p] = icon })
+                    return n
+                  })
+                }
               }}
               className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all text-sm font-medium"
             >
               批量应用
+            </button>
+            <button
+              onClick={async () => {
+                if (!selectedFolderPaths.length) return
+                const targets = [...selectedFolderPaths]
+                const success: string[] = []
+                for (const p of targets) {
+                  const ok = await window.api.restoreIcon(p)
+                  if (ok) success.push(p)
+                }
+                if (success.length) {
+                  setFolders((prev) => prev.map((f) => (success.includes(f.path) ? { ...f, status: '待处理' } : f)))
+                  setFolderThumbs((prev) => {
+                    const n = { ...prev }
+                    success.forEach((p) => { n[p] = '' })
+                    return n
+                  })
+                  setAppliedIcons((prev) => {
+                    const n = { ...prev }
+                    success.forEach((p) => { delete n[p] })
+                    return n
+                  })
+                  setFolder((prev) => prev)
+                  if (success.includes(folder)) {
+                    const res = await window.api.getFolderPreview(folder)
+                    setFolderPreview(res.ok ? res : null)
+                  }
+                }
+              }}
+              className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-medium"
+            >
+              批量还原
+            </button>
+            <button
+              onClick={() => {
+                if (!selectedFolderPaths.length) return
+                const targets = new Set(selectedFolderPaths)
+                setFolders((prev) => prev.filter((f) => !targets.has(f.path)))
+                setSelectedFolderPaths([])
+                setFolder((prev) => (targets.has(prev) ? '' : prev))
+                setSelectedFolderItem((prev) => (prev && targets.has(prev.path) ? null : prev))
+                setFolderThumbs((prev) => {
+                  const n = { ...prev }
+                  selectedFolderPaths.forEach((p) => { delete n[p] })
+                  return n
+                })
+                setAppliedIcons((prev) => {
+                  const n = { ...prev }
+                  selectedFolderPaths.forEach((p) => { delete n[p] })
+                  return n
+                })
+              }}
+              className="px-6 py-2 bg-red-500 text-white rounded-lg hover:shadow-lg transition-all text-sm font-medium"
+            >
+              批量删除
             </button>
           </div>
         </div>
