@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
+import os from 'node:os'
 import { execFile, execFileSync } from 'node:child_process'
 import Store from 'electron-store'
 
@@ -128,6 +129,35 @@ function restoreFolderIcon(folder) {
   }
 }
 
+function runShortcutScript(scriptContent, args) {
+  try {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-helper-'))
+    const scriptPath = path.join(tmpDir, 'shortcut.js')
+    fs.writeFileSync(scriptPath, scriptContent, { encoding: 'utf8' })
+    execFileSync('cscript', ['//nologo', scriptPath, ...args], { windowsHide: true })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function applyShortcutIcon(lnkPath, iconPath) {
+  if (!lnkPath || !iconPath) return false
+  if (!fs.existsSync(lnkPath) || !fs.existsSync(iconPath)) return false
+  const content = "var sh=WScript.CreateObject('WScript.Shell');var p=WScript.Arguments.Item(0);var i=WScript.Arguments.Item(1);var s=sh.CreateShortcut(p);s.IconLocation=i+',0';s.Save();"
+  const ok = runShortcutScript(content, [lnkPath, iconPath])
+  if (ok) refreshIconCache()
+  return ok
+}
+
+function restoreShortcutIcon(lnkPath) {
+  if (!lnkPath || !fs.existsSync(lnkPath)) return false
+  const content = "var sh=WScript.CreateObject('WScript.Shell');var p=WScript.Arguments.Item(0);var s=sh.CreateShortcut(p);var t=s.TargetPath; if (t) { s.IconLocation=t+',0'; } else { s.IconLocation=''; } s.Save();"
+  const ok = runShortcutScript(content, [lnkPath])
+  if (ok) refreshIconCache()
+  return ok
+}
+
 function refreshIconCache() {
   const sysRoot = process.env.SystemRoot || 'C:\\\\Windows'
   const ie4u = path.join(sysRoot, 'System32', 'ie4uinit.exe')
@@ -191,6 +221,18 @@ app.whenReady().then(() => {
     return res.filePaths
   })
 
+  ipcMain.handle('pick-shortcut', async () => {
+    const res = await dialog.showOpenDialog({ filters: [{ name: 'Shortcuts', extensions: ['lnk'] }], properties: ['openFile'] })
+    if (res.canceled || res.filePaths.length === 0) return ''
+    return res.filePaths[0]
+  })
+
+  ipcMain.handle('pick-shortcuts', async () => {
+    const res = await dialog.showOpenDialog({ filters: [{ name: 'Shortcuts', extensions: ['lnk'] }], properties: ['openFile', 'multiSelections'] })
+    if (res.canceled || res.filePaths.length === 0) return []
+    return res.filePaths
+  })
+
   ipcMain.handle('apply-icon', async (_e, folder, icon) => {
     if (!folder || !icon) return false
     const copied = copyIconToFolder(folder, icon)
@@ -204,6 +246,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('restore-icon', async (_e, folder) => {
     return restoreFolderIcon(folder)
+  })
+
+  ipcMain.handle('apply-shortcut-icon', async (_e, lnk, icon) => {
+    return applyShortcutIcon(lnk, icon)
+  })
+
+  ipcMain.handle('restore-shortcut-icon', async (_e, lnk) => {
+    return restoreShortcutIcon(lnk)
   })
 
   ipcMain.handle('get-icon-preview', async (_e, iconPath) => {

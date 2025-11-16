@@ -1,0 +1,114 @@
+import React from 'react'
+import { Button } from '../../components/ui/button'
+import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card'
+import { Sparkles } from 'lucide-react'
+
+type Item = { type: 'folder' | 'shortcut' | 'application' | 'filetype'; name: string; path: string; ext?: string }
+type FolderPreview = { ok: boolean; hasDesktopIni: boolean; hasFolderIco: boolean; iconPath: string; iconDataUrl: string } | null
+
+type Props = {
+  selectedFolderItem: Item | null
+  folderPreview: FolderPreview
+  typeEmoji: Record<'folder' | 'shortcut' | 'application' | 'filetype', string>
+  iconPreview: string
+  icon: string
+  folder: string
+  onApplyIcon: () => void
+  onRestore: () => void | Promise<void>
+  onSmartMatch: () => void
+  recommendations: Array<{ name: string; path: string }>
+  thumbs: Record<string, string>
+  onClickRecommendation: (path: string) => void
+}
+
+export default function PreviewPanel(props: Props) {
+  const { selectedFolderItem, folderPreview, typeEmoji, iconPreview, icon, folder, onApplyIcon, onRestore, onSmartMatch, recommendations, thumbs, onClickRecommendation } = props
+  return (
+    <div className="w-80 bg-card border-l border-border overflow-y-auto">
+      <div className="p-6">
+        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">实时预览</h3>
+
+        <div className="bg-card rounded-2xl p-8 mb-4 aspect-square flex items-center justify-center">
+          {selectedFolderItem?.type === 'folder' ? (
+            folderPreview?.iconDataUrl ? (
+              <img src={folderPreview.iconDataUrl} alt={selectedFolderItem?.name || ''} className="w-24 h-24 object-contain" />
+            ) : (
+              <div className="text-center">
+                <div className="text-8xl mb-4">{typeEmoji.folder}</div>
+              </div>
+            )
+          ) : (
+            <div className="text-center">
+              <div className="text-8xl mb-4">{selectedFolderItem ? typeEmoji[selectedFolderItem.type] : '📁'}</div>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <Card className="p-3">
+            <CardHeader className="p-0 mb-1">
+              <CardTitle className="text-xs font-normal text-gray-500 dark:text-gray-400">{selectedFolderItem?.type === 'filetype' ? '文件类型扩展名' : selectedFolderItem?.type === 'shortcut' ? '快捷方式路径' : selectedFolderItem?.type === 'application' ? '应用程序路径' : '文件夹路径'}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="text-sm text-gray-800 dark:text-white font-mono break-all">{selectedFolderItem?.type === 'filetype' ? (selectedFolderItem?.ext || '未选择') : (selectedFolderItem?.path || folder || '未选择')}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="p-3">
+            <CardHeader className="p-0 mb-1">
+              <CardTitle className="text-xs font-normal text-gray-500 dark:text-gray-400">当前图标</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {selectedFolderItem?.type === 'folder' ? (
+                <div className="flex items-center gap-2">
+                  {iconPreview ? (
+                    <img src={iconPreview} alt="icon" className="w-10 h-10 object-contain" />
+                  ) : (
+                    <span className="text-3xl">📁</span>
+                  )}
+                  <div className="text-sm text-gray-800 dark:text-white">{icon ? icon.split(/\\|\//).pop() : '未选择图标(.ico)'}</div>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-600 dark:text-gray-400">功能待开发</div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button disabled={!icon || !selectedFolderItem || (selectedFolderItem.type === 'folder' ? !folder : selectedFolderItem.type !== 'shortcut')} onClick={onApplyIcon}>
+              应用图标
+            </Button>
+            <Button variant="outline" onClick={onRestore}>
+              还原
+            </Button>
+          </div>
+
+          <Button onClick={onSmartMatch} className="w-full">
+            <Sparkles className="w-4 h-4" />
+            一键匹配图标
+          </Button>
+        </div>
+
+        <div className="mt-6">
+          <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-3">相似推荐</h4>
+          <div className="grid grid-cols-4 gap-2">
+            {recommendations.map((it) => (
+              <Button key={it.path} variant="secondary" className="aspect-square rounded-lg p-2" onClick={() => { onClickRecommendation(it.path) }}>
+                {thumbs[it.path] ? (
+                  <img src={thumbs[it.path]} alt={it.name} className="w-full h-full object-contain" />
+                ) : (
+                  <span className="text-2xl">📁</span>
+                )}
+              </Button>
+            ))}
+            {recommendations.length === 0 ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="aspect-square rounded-lg border border-border bg-muted" />
+              ))
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
