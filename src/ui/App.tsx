@@ -1,6 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import clsx from 'clsx'
 import { Folder, Settings, Search, Sparkles, Plus, Minus, Maximize, Square, X, Check } from 'lucide-react'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Badge } from '../components/ui/badge'
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
+import { Checkbox } from '../components/ui/checkbox'
 
 declare global {
   interface Window {
@@ -59,6 +64,10 @@ export default function App() {
   const [selectedFolderPaths, setSelectedFolderPaths] = useState<string[]>([])
 
   const loadLibrary = useCallback(async () => {
+    if (!window.api?.listIcons) {
+      setLibraryIcons([])
+      return
+    }
     const res = await window.api.listIcons()
     if (!res.ok) return
     setLibraryIcons(res.items)
@@ -70,7 +79,7 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true
-    window.api.windowIsMaximized?.().then((v) => {
+    window.api?.windowIsMaximized?.().then((v) => {
       if (!mounted) return
       setIsMaximized(!!v)
     })
@@ -214,12 +223,12 @@ export default function App() {
   }, [folders])
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800" onDrop={onDrop} onDragOver={onDragOver}>
-      <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between px-6 py-3 window-drag" onDoubleClick={async () => { await window.api.windowToggleMaximize?.(); const v = await window.api.windowIsMaximized?.(); setIsMaximized(!!v) }}>
+    <div className="flex flex-col h-screen bg-background" onDrop={onDrop} onDragOver={onDragOver}>
+      <div className="bg-card border-b border-border">
+        <div className="flex items-center justify-between px-6 py-3 window-drag" onDoubleClick={async () => { await window.api?.windowToggleMaximize?.(); const v = await window.api?.windowIsMaximized?.(); setIsMaximized(!!v) }}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <Folder className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-muted text-foreground flex items-center justify-center">
+              <Folder className="w-6 h-6" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-800 dark:text-white">文件夹图标管理器</h1>
@@ -230,69 +239,57 @@ export default function App() {
           <div className="flex items-center gap-3 no-drag">
             <div className="relative no-drag">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
+              <Input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="搜索图标..."
-                className="pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="pl-10 pr-4 w-64"
               />
             </div>
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => {
-                // 功能待开发：设置与图标库目录选择
                 alert('设置：功能待开发')
               }}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
-              <Settings className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-            </button>
-            <label className="switch" aria-label="主题切换">
-              <input id="theme-toggle-input" type="checkbox" checked={isDark} onChange={() => setIsDark((v) => !v)} />
-              <div className="slider round">
-                <div className="sun-moon">
-                  <svg id="moon-dot-1" className="moon-dot" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                  <svg id="moon-dot-2" className="moon-dot" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                  <svg id="moon-dot-3" className="moon-dot" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                  <svg id="light-ray-1" className="light-ray" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                  <svg id="light-ray-2" className="light-ray" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                  <svg id="light-ray-3" className="light-ray" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                  <svg id="cloud-1" className="cloud-dark" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                  <svg id="cloud-2" className="cloud-dark" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                  <svg id="cloud-3" className="cloud-dark" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                  <svg id="cloud-4" className="cloud-light" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                  <svg id="cloud-5" className="cloud-light" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                  <svg id="cloud-6" className="cloud-light" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
-                </div>
-                <div className="stars">
-                  <svg id="star-1" className="star" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
-                  <svg id="star-2" className="star" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
-                  <svg id="star-3" className="star" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
-                  <svg id="star-4" className="star" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
-                </div>
+              <Settings className="w-5 h-5" />
+            </Button>
+            <label className="toggle no-drag" aria-label="主题切换">
+              <input type="checkbox" className="input" id="switch" checked={isDark} onChange={() => setIsDark((v) => !v)} />
+              <div className="icon icon--moon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                  <path fillRule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z" clipRule="evenodd"></path>
+                </svg>
+              </div>
+              <div className="icon icon--sun">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                  <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"></path>
+                </svg>
               </div>
             </label>
             <div className="flex items-center gap-1">
-              <button onClick={async () => { await window.api.windowMinimize?.() }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+              <Button variant="ghost" size="icon" onClick={async () => { await window.api?.windowMinimize?.() }}>
                 <Minus className="w-4 h-4" />
-              </button>
-              <button onClick={async () => { await window.api.windowToggleMaximize?.(); const v = await window.api.windowIsMaximized?.(); setIsMaximized(!!v) }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+              </Button>
+              <Button variant="ghost" size="icon" onClick={async () => { await window.api?.windowToggleMaximize?.(); const v = await window.api?.windowIsMaximized?.(); setIsMaximized(!!v) }}>
                 {isMaximized ? <Square className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-              </button>
-              <button onClick={async () => { await window.api.windowClose?.() }} className="p-2 hover:bg-red-100 dark:hover:bg-red-800 rounded-lg transition-colors">
+              </Button>
+              <Button variant="ghost" size="icon" onClick={async () => { await window.api?.windowClose?.() }}>
                 <X className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="w-64 bg-white/70 dark:bg-gray-800/70 backdrop-blur-lg border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
+        <div className="w-64 bg-card border-r border-border overflow-y-auto">
           <div className="p-4">
             <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 flex items-center justify-between">
               <span>待处理文件夹</span>
-              <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2 py-1 rounded-full">{folders.length}</span>
+              <span className="text-xs bg-secondary text-secondary-foreground px-2 py-1 rounded-full">{folders.length}</span>
             </h3>
             <div className="space-y-2">
               {folders.map((f, idx) => (
@@ -304,21 +301,19 @@ export default function App() {
                   }}
                   className={clsx(
                     'p-3 rounded-lg border cursor-pointer transition-all',
-                    selectedFolderItem?.path === f.path ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                    selectedFolderItem?.path === f.path ? 'border-ring bg-muted' : 'border-border hover:bg-muted'
                   )}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={selectedFolderPaths.includes(f.path)}
-                      onChange={(e) => {
-                        e.stopPropagation()
+                      onCheckedChange={(checked) => {
                         setSelectedFolderPaths((prev) => {
-                          if (e.target.checked) return prev.includes(f.path) ? prev : [...prev, f.path]
+                          if (checked) return prev.includes(f.path) ? prev : [...prev, f.path]
                           return prev.filter((p) => p !== f.path)
                         })
                       }}
-                      className="w-4 h-4 border-gray-300 rounded"
+                      onClick={(e) => e.stopPropagation()}
                     />
                     {folderThumbs[f.path] ? (
                       <img src={folderThumbs[f.path]} alt={f.name} className="w-6 h-6 object-contain" />
@@ -330,7 +325,9 @@ export default function App() {
                       <div className="text-xs text-gray-500 truncate">{f.path}</div>
                     </div>
                     {selectedFolderItem?.path === f.path ? (
-                      <button
+                      <Button
+                        variant="destructive"
+                        size="xs"
                         onClick={(e) => {
                           e.stopPropagation()
                           setFolders((prev) => prev.filter((p) => p.path !== f.path))
@@ -343,14 +340,14 @@ export default function App() {
                             return n
                           })
                         }}
-                        className="ml-2 px-2 py-1 text-xs text-red-600 border border-red-300 dark:border-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                        className="ml-2"
                       >
                         删除
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                   <div className="flex items-center justify-between mt-2">
-                    <span className={clsx('text-xs px-2 py-0.5 rounded-full', f.status === '已修改' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400')}>{f.status}</span>
+                    <Badge variant="outline">{f.status}</Badge>
                   </div>
                 </div>
               ))}
@@ -359,7 +356,8 @@ export default function App() {
               ) : null}
             </div>
 
-            <button
+            <Button
+              variant="outline"
               onClick={async () => {
                 const arr = (await window.api.pickFolders?.()) || []
                 if (!arr.length) {
@@ -387,11 +385,11 @@ export default function App() {
                 setSelectedFolderItem(items[0] || null)
                 setFolder(items[0]?.path || '')
               }}
-              className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"
+              className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-3"
             >
               <Plus className="w-5 h-5 text-gray-400" />
               <span className="text-sm text-gray-600 dark:text-gray-400">添加文件夹</span>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -402,31 +400,30 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={pickIcon}
-                className="ml-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                导入图标(.ico)
-              </button>
-              <button
+              <Button onClick={pickIcon} className="ml-2 text-xs">
+                导入图标
+              </Button>
+              <Button
+                variant="outline"
                 onClick={async () => {
                   await window.api.openIconLibraryFolder()
                 }}
-                className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="text-xs"
               >
                 查看图标库文件夹
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
                 onClick={async () => {
                   const res = await window.api.resetIconLibraryPath()
                   if (res.ok) {
                     await loadLibrary()
                   }
                 }}
-                className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="text-xs"
               >
                 🔃刷新
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -439,8 +436,8 @@ export default function App() {
                   setIcon(it.path)
                 }}
                 className={clsx(
-                  'group relative bg-white dark:bg-gray-800 rounded-xl p-4 hover:shadow-xl hover:scale-105 transition-all cursor-pointer border border-gray-200 dark:border-gray-700 w-[120px]',
-                  selectedLibraryIndex === i && 'ring-2 ring-blue-500'
+                  'group relative bg-card rounded-xl p-4 hover:shadow-sm transition-all cursor-pointer border border-border w-[120px]',
+                  selectedLibraryIndex === i && 'ring-2 ring-ring'
                 )}
               >
                 <div className="w-full aspect-square flex items-center justify-center text-4xl mb-2">
@@ -451,7 +448,7 @@ export default function App() {
                   )}
                 </div>
                 <div className="text-xs text-center text-gray-600 dark:text-gray-400 truncate">{it.name}</div>
-                <button
+                <Button
                   onClick={async (e) => {
                     e.stopPropagation()
                     if (!selectedFolderItem) return
@@ -489,8 +486,8 @@ export default function App() {
                   className={clsx(
                     'absolute top-2 right-2 opacity-0 group-hover:opacity-100 rounded-full transition-opacity transition-colors duration-200 ease-out flex items-center justify-center',
                     selectedFolderItem && appliedIcons[selectedFolderItem.path] === it.path
-                      ? 'bg-green-500 text-white min-w-[34px] h-6'
-                      : 'bg-transparent border border-blue-600 text-blue-600 min-w-[34px] h-6 text-[9px]'
+                      ? 'bg-muted text-foreground min-w-[34px] h-6'
+                      : 'bg-transparent border border-border text-foreground min-w-[34px] h-6 text-[9px]'
                   )}
                 >
                   {selectedFolderItem && appliedIcons[selectedFolderItem.path] === it.path ? (
@@ -498,7 +495,7 @@ export default function App() {
                   ) : (
                     <span className="apply-btn-text">应用</span>
                   )}
-                </button>
+                </Button>
               </div>
             ))}
             {libraryIcons.length === 0 ? (
@@ -507,11 +504,11 @@ export default function App() {
           </div>
         </div>
 
-        <div className="w-80 bg-white/70 dark:bg-gray-800/70 backdrop-blur-lg border-l border-gray-200 dark:border-gray-700 overflow-y-auto">
+        <div className="w-80 bg-card border-l border-border overflow-y-auto">
           <div className="p-6">
             <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">实时预览</h3>
 
-            <div className="bg-gradient-to-br from-blue-100 to-purple-100 dark:from-gray-700 dark:to-gray-600 rounded-2xl p-8 mb-4 aspect-square flex items-center justify-center">
+            <div className="bg-card rounded-2xl p-8 mb-4 aspect-square flex items-center justify-center">
               {folderPreview?.iconDataUrl ? (
                 <img src={folderPreview.iconDataUrl} alt={selectedFolderItem?.name || ''} className="w-24 h-24 object-contain" />
               ) : (
@@ -522,32 +519,35 @@ export default function App() {
             </div>
 
             <div className="space-y-3">
-              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
-                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">文件夹路径</div>
-                <div className="text-sm text-gray-800 dark:text-white font-mono break-all">{folder || '未选择'}</div>
-              </div>
+              <Card className="p-3">
+                <CardHeader className="p-0 mb-1">
+                  <CardTitle className="text-xs font-normal text-gray-500 dark:text-gray-400">文件夹路径</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="text-sm text-gray-800 dark:text-white font-mono break-all">{folder || '未选择'}</div>
+                </CardContent>
+              </Card>
 
-              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
-                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">当前图标</div>
-                <div className="flex items-center gap-2">
-                  {iconPreview ? (
-                    <img src={iconPreview} alt="icon" className="w-10 h-10 object-contain" />
-                  ) : (
-                    <span className="text-3xl">📁</span>
-                  )}
-                  <div className="text-sm text-gray-800 dark:text-white">{icon ? icon.split(/\\|\//).pop() : '未选择图标(.ico)'}</div>
-                </div>
-              </div>
+              <Card className="p-3">
+                <CardHeader className="p-0 mb-1">
+                  <CardTitle className="text-xs font-normal text-gray-500 dark:text-gray-400">当前图标</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-2">
+                    {iconPreview ? (
+                      <img src={iconPreview} alt="icon" className="w-10 h-10 object-contain" />
+                    ) : (
+                      <span className="text-3xl">📁</span>
+                    )}
+                    <div className="text-sm text-gray-800 dark:text-white">{icon ? icon.split(/\\|\//).pop() : '未选择图标(.ico)'}</div>
+                  </div>
+                </CardContent>
+              </Card>
 
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  disabled={!folder || !icon}
-                  onClick={apply}
-                  className={clsx('px-4 py-2.5 rounded-lg text-sm font-medium text-white', !folder || !icon ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:shadow-lg transition-all')}
-                >
-                  应用图标
-                </button>
-                <button
+                <Button disabled={!folder || !icon} onClick={apply}>应用图标</Button>
+                <Button
+                  variant="outline"
                   onClick={async () => {
                     if (!folder) return
                     const ok = await window.api.restoreIcon(folder)
@@ -565,31 +565,30 @@ export default function App() {
                       alert('还原失败')
                     }
                   }}
-                  className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-medium"
                 >
                   还原
-                </button>
+                </Button>
               </div>
 
-              <button
+              <Button
                 onClick={() => {
                   // 功能待开发：AI智能推荐（基于文件夹名称/分类推荐合适图标）
                   alert('AI智能推荐：功能待开发')
                 }}
-                className="w-full px-4 py-2.5 bg-purple-500 text-white rounded-lg hover:shadow-lg transition-all text-sm font-medium flex items-center justify-center gap-2"
+                className="w-full"
               >
                 <Sparkles className="w-4 h-4" />
                 AI智能推荐
-              </button>
+              </Button>
             </div>
 
             <div className="mt-6">
               <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-3">相似推荐</h4>
               <div className="grid grid-cols-4 gap-2">
                 {['📂', '🗂️', '📊', '💼', '🎨', '⚙️', '🎮', '📝'].map((em, i) => (
-                  <button key={i} className="aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center text-2xl hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors">
+                  <Button key={i} variant="secondary" className="aspect-square rounded-lg text-2xl">
                     {em}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -597,16 +596,16 @@ export default function App() {
         </div>
       </div>
 
-      <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-t border-gray-200 dark:border-gray-700 px-6 py-3">
+      <div className="bg-card border-t border-border px-6 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-            <span>已选择: <strong className="text-blue-600 dark:text-blue-400">{selectedFolderPaths.length}</strong> 个文件夹</span>
+            <span>已选择: <strong className="text-foreground">{selectedFolderPaths.length}</strong> 个文件夹</span>
             <span>|</span>
             <span>共管理: <strong>{folders.length}</strong> 个文件夹</span>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
+            <Button
               onClick={async () => {
                 if (!icon || !selectedFolderPaths.length) return
                 const targets = [...selectedFolderPaths]
@@ -637,11 +636,12 @@ export default function App() {
                   })
                 }
               }}
-              className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all text-sm font-medium"
+              variant="outline"
+              className="text-sm"
             >
               批量应用
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={async () => {
                 if (!selectedFolderPaths.length) return
                 const targets = [...selectedFolderPaths]
@@ -669,11 +669,12 @@ export default function App() {
                   }
                 }
               }}
-              className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-medium"
+              variant="outline"
+              className="text-sm"
             >
               批量还原
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => {
                 if (!selectedFolderPaths.length) return
                 const targets = new Set(selectedFolderPaths)
@@ -692,10 +693,11 @@ export default function App() {
                   return n
                 })
               }}
-              className="px-6 py-2 bg-red-500 text-white rounded-lg hover:shadow-lg transition-all text-sm font-medium"
+              variant="destructive"
+              className="text-sm"
             >
               批量删除
-            </button>
+            </Button>
           </div>
         </div>
       </div>
