@@ -78,9 +78,9 @@ body {
 
 .toggle {
   background-color: transparent;
-  width: 33px;
-  height: 33px;
-  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  border-radius: 15%;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -147,6 +147,12 @@ body {
   100% { opacity: 1; transform: translateY(0) rotate(0deg); }
 }
 
+.toggle:hover {
+  background-color: oklch(var(--accent));
+}
+.toggle:has(#switch:checked):hover {
+  background-color: oklch(var(--accent));
+}
 .switch {
   position: relative;
   display: inline-block;

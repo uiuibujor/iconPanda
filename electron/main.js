@@ -185,6 +185,12 @@ app.whenReady().then(() => {
     return res.filePaths[0]
   })
 
+  ipcMain.handle('pick-icons', async () => {
+    const res = await dialog.showOpenDialog({ filters: [{ name: 'Icons', extensions: ['ico'] }], properties: ['openFile', 'multiSelections'] })
+    if (res.canceled || res.filePaths.length === 0) return []
+    return res.filePaths
+  })
+
   ipcMain.handle('apply-icon', async (_e, folder, icon) => {
     if (!folder || !icon) return false
     const copied = copyIconToFolder(folder, icon)

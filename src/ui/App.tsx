@@ -13,6 +13,7 @@ declare global {
       pickFolder: () => Promise<string>
       pickFolders: () => Promise<string[]>
       pickIcon: () => Promise<string>
+      pickIcons?: () => Promise<string[]>
       applyIcon: (folder: string, icon: string) => Promise<boolean>
       getIconPreview: (iconPath: string) => Promise<{ ok: boolean; dataUrl: string }>
       getFolderPreview: (
@@ -62,15 +63,21 @@ export default function App() {
   })
   const [appliedIcons, setAppliedIcons] = useState<Record<string, string>>({})
   const [selectedFolderPaths, setSelectedFolderPaths] = useState<string[]>([])
+  const [libraryLoading, setLibraryLoading] = useState(false)
 
   const loadLibrary = useCallback(async () => {
-    if (!window.api?.listIcons) {
-      setLibraryIcons([])
-      return
+    setLibraryLoading(true)
+    try {
+      if (!window.api?.listIcons) {
+        setLibraryIcons([])
+        return
+      }
+      const res = await window.api.listIcons()
+      if (!res.ok) return
+      setLibraryIcons(res.items)
+    } finally {
+      setLibraryLoading(false)
     }
-    const res = await window.api.listIcons()
-    if (!res.ok) return
-    setLibraryIcons(res.items)
   }, [])
 
   useEffect(() => {
@@ -128,14 +135,30 @@ export default function App() {
   }, [])
 
   const pickIcon = useCallback(async () => {
-    const i = await window.api.pickIcon()
-    if (!i) return
-    const r = await window.api.importIcon(i)
-    if (r.ok) {
-      setIcon(r.dest)
-      loadLibrary()
+    setLibraryLoading(true)
+    try {
+      const arr = await window.api.pickIcons?.()
+      if (arr && arr.length) {
+        let last = ''
+        for (const p of arr) {
+          const r = await window.api.importIcon(p)
+          if (r.ok) last = r.dest
+        }
+        if (last) setIcon(last)
+        await loadLibrary()
+        return
+      }
+      const i = await window.api.pickIcon()
+      if (!i) return
+      const r = await window.api.importIcon(i)
+      if (r.ok) {
+        setIcon(r.dest)
+        await loadLibrary()
+      }
+    } finally {
+      setLibraryLoading(false)
     }
-  }, [])
+  }, [loadLibrary])
 
   const apply = useCallback(async () => {
     const ok = await window.api.applyIcon(folder, icon)
@@ -410,7 +433,7 @@ export default function App() {
                 }}
                 className="text-xs"
               >
-                查看图标库文件夹
+                打开图标库文件夹
               </Button>
               <Button
                 variant="outline"
@@ -427,8 +450,18 @@ export default function App() {
             </div>
           </div>
 
-          <div className={'flex flex-wrap gap-4'}>
-            {(libraryIcons.length ? libraryIcons.filter((it) => it.name.toLowerCase().includes(searchQuery.toLowerCase())) : []).map((it, i) => (
+          <div className={'flex flex-wrap gap-4 min-h-[160px]'}>
+            {libraryLoading ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="bg-card rounded-xl p-4 border border-border w-[120px]">
+                  <div className="w-full aspect-square flex items-center justify-center mb-2">
+                    <div className="w-12 h-12 rounded bg-muted animate-pulse" />
+                  </div>
+                  <div className="h-3 w-20 mx-auto rounded bg-muted animate-pulse" />
+                </div>
+              ))
+            ) : (
+              (libraryIcons.length ? libraryIcons.filter((it) => it.name.toLowerCase().includes(searchQuery.toLowerCase())) : []).map((it, i) => (
               <div
                 key={it.path}
                 onClick={() => {
@@ -486,8 +519,8 @@ export default function App() {
                   className={clsx(
                     'absolute top-2 right-2 opacity-0 group-hover:opacity-100 rounded-full transition-opacity transition-colors duration-200 ease-out flex items-center justify-center',
                     selectedFolderItem && appliedIcons[selectedFolderItem.path] === it.path
-                      ? 'bg-muted text-foreground min-w-[34px] h-6'
-                      : 'bg-transparent border border-border text-foreground min-w-[34px] h-6 text-[9px]'
+                      ? 'bg-muted text-foreground min-w-[50px] h-6 hover:ring-1 hover:ring-border'
+                      : 'bg-transparent border border-border text-foreground min-w-[50px] h-6 text-[9px] hover:ring-1 hover:ring-border'
                   )}
                 >
                   {selectedFolderItem && appliedIcons[selectedFolderItem.path] === it.path ? (
@@ -497,7 +530,8 @@ export default function App() {
                   )}
                 </Button>
               </div>
-            ))}
+              ))
+            )}
             {libraryIcons.length === 0 ? (
               <div className="col-span-8 text-center text-sm text-gray-500 dark:text-gray-400 py-8">图标库为空，点击“导入图标(.ico)”进行导入</div>
             ) : null}
