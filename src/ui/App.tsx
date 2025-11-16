@@ -12,6 +12,7 @@ import usePreviews from './hooks/usePreviews'
 import useIconLibrary from './hooks/useIconLibrary'
 import useTheme from './hooks/useTheme'
 import useWindowControls from './hooks/useWindowControls'
+import { Button } from '../components/ui/button'
 
 declare global {
   interface Window {
@@ -22,16 +23,21 @@ declare global {
       pickShortcuts?: () => Promise<string[]>
       pickIcon: () => Promise<string>
       pickIcons?: () => Promise<string[]>
+      pickApplication?: () => Promise<string>
       applyIcon: (folder: string, icon: string) => Promise<boolean>
       applyShortcutIcon?: (lnk: string, icon: string) => Promise<boolean>
       getIconPreview: (iconPath: string) => Promise<{ ok: boolean; dataUrl: string }>
       getFolderPreview: (
         folderPath: string
       ) => Promise<{ ok: boolean; hasDesktopIni: boolean; hasFolderIco: boolean; iconPath: string; iconDataUrl: string }>
+      getShortcutPreview?: (lnkPath: string) => Promise<{ ok: boolean; iconPath: string; iconDataUrl: string; fromTarget: boolean }>
+      getFileIconPreview?: (filePath: string) => Promise<{ ok: boolean; dataUrl: string }>
+      getFileIconPreviews?: (filePath: string, index?: number) => Promise<{ ok: boolean; items: { size: 'small' | 'large' | number; dataUrl: string }[] }>
       getIconLibraryPath: () => Promise<{ ok: boolean; path: string }>
       chooseIconLibraryFolder: () => Promise<{ ok: boolean; path: string }>
       listIcons: () => Promise<{ ok: boolean; items: { name: string; path: string }[] }>
       importIcon: (srcPath: string) => Promise<{ ok: boolean; dest: string }>
+      extractIconToLibrary?: (srcPath: string, index?: number, size?: 'small' | 'large' | number) => Promise<{ ok: boolean; dest: string }>
       openIconLibraryFolder: () => Promise<{ ok: boolean }>
       resetIconLibraryPath: () => Promise<{ ok: boolean; path?: string }>
       restoreIcon: (folder: string) => Promise<boolean>
@@ -67,11 +73,25 @@ export default function App() {
   const [batchPreviewMode, setBatchPreviewMode] = useState<'match' | 'apply' | 'restore'>('match')
   const [typeFilter, setTypeFilter] = useState<'all' | 'folder' | 'shortcut' | 'application' | 'filetype'>('all')
 
-  const { iconPreview, folderPreview, folderThumbs, setFolderPreview, setFolderThumbs } = usePreviews(icon, folder, folders)
+  const { iconPreview, folderPreview, folderThumbs, itemThumbs, setFolderPreview, setFolderThumbs, setItemThumbs } = usePreviews(icon, folder, folders)
+  const [sizePickerOpen, setSizePickerOpen] = useState(false)
+  const [sizePickerImages, setSizePickerImages] = useState<Array<{ size: 'small' | 'large' | number; dataUrl: string }>>([])
+  const [sizePickerSourcePath, setSizePickerSourcePath] = useState<string>('')
 
   useEffect(() => {
     loadLibrary()
   }, [loadLibrary])
+
+  const shortcutPreview = useMemo(() => {
+    if (!selectedFolderItem || selectedFolderItem.type !== 'shortcut') return null
+    const dataUrl = itemThumbs[selectedFolderItem.path] || ''
+    return dataUrl ? { ok: true, iconPath: '', iconDataUrl: dataUrl, fromTarget: false } : null
+  }, [selectedFolderItem, itemThumbs])
+
+  const applicationPreview = useMemo(() => {
+    if (!selectedFolderItem || selectedFolderItem.type !== 'application') return ''
+    return itemThumbs[selectedFolderItem.path] || ''
+  }, [selectedFolderItem, itemThumbs])
 
 
 
@@ -111,6 +131,8 @@ export default function App() {
       setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '已修改' } : p)))
       setSelectedFolderItem((prev) => (prev ? { ...prev, status: '已修改' } : prev))
       setAppliedIcons((prev) => ({ ...prev, [selectedFolderItem.path]: icon }))
+      const res = await window.api.getShortcutPreview?.(selectedFolderItem.path)
+      setItemThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res && res.ok ? res.iconDataUrl : (prev[selectedFolderItem.path] || '') }))
     }
   }, [selectedFolderItem, icon])
 
@@ -221,6 +243,9 @@ export default function App() {
           const res = await window.api.getFolderPreview(selectedFolderItem.path)
           setFolderPreview(res.ok ? res : null)
           setFolderThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res.ok ? res.iconDataUrl : '' }))
+        } else if (selectedFolderItem.type === 'shortcut') {
+          const res = await window.api.getShortcutPreview?.(selectedFolderItem.path)
+          setItemThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res && res.ok ? res.iconDataUrl : (prev[selectedFolderItem.path] || '') }))
         }
         setAppliedIcons((prev) => ({ ...prev, [selectedFolderItem.path]: iconPath }))
       } else {
@@ -250,6 +275,8 @@ export default function App() {
       if (ok) {
         setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '待处理' } : p)))
         setAppliedIcons((prev) => { const n = { ...prev }; delete n[selectedFolderItem.path]; return n })
+        const res = await window.api.getShortcutPreview?.(selectedFolderItem.path)
+        setItemThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res && res.ok ? res.iconDataUrl : (prev[selectedFolderItem.path] || '') }))
       } else {
         alert('还原失败')
       }
@@ -358,7 +385,7 @@ export default function App() {
           onTypeFilterChange={(v) => setTypeFilter(v as any)}
           selectedFolderItem={selectedFolderItem}
           selectedFolderPaths={selectedFolderPaths}
-          folderThumbs={folderThumbs}
+          itemThumbs={itemThumbs}
           typeEmoji={typeEmoji}
           typeLabel={typeLabel}
           typeIcon={typeIcon}
@@ -369,18 +396,39 @@ export default function App() {
           onDeleteItem={(path) => { setFolders((prev) => prev.filter((p) => p.path !== path)); setFolder((prev) => (prev === path ? '' : prev)); setSelectedFolderItem((prev) => (prev?.path === path ? null : prev)); setSelectedFolderPaths((prev) => prev.filter((p) => p !== path)); setFolderThumbs((prev) => { const n = { ...prev }; delete n[path]; return n }) }}
           onAddFolders={async () => { const arr = (await window.api.pickFolders?.()) || []; if (!arr.length) { const f = await window.api.pickFolder(); if (!f) return; const name = f.replace(/\\+/g, '/').split('/').filter(Boolean).pop() || 'Folder'; const item = { type: 'folder' as const, name, path: f, icon: '📁', status: '待处理' as const }; setFolders((prev) => { const exists = prev.some((p) => p.path === f); return exists ? prev : [item, ...prev] }); setSelectedFolderItem(item); setFolder(f); return } const items = arr.map((f) => { const name = f.replace(/\\+/g, '/').split('/').filter(Boolean).pop() || 'Folder'; return { type: 'folder' as const, name, path: f, icon: '📁', status: '待处理' as const } }); setFolders((prev) => { const set = new Set(prev.map((p) => p.path)); const merged = items.filter((it) => !set.has(it.path)); return merged.length ? [...merged, ...prev] : prev }); setSelectedFolderItem(items[0] || null); setFolder(items[0]?.path || '') }}
           onAddShortcut={async () => { const p = await window.api.pickShortcut?.(); if (!p) { alert('未选择快捷方式'); return } const name = p.replace(/\\+/g, '/').split('/').filter(Boolean).pop() || 'Shortcut'; const item = { type: 'shortcut' as const, name, path: p, icon: '🔗', status: '待处理' as const }; setFolders((prev) => (prev.some((it) => it.path === item.path) ? prev : [item, ...prev])); setSelectedFolderItem(item); setFolder('') }}
-          onAddApplication={() => { const item = { type: 'application' as const, name: '示例应用', path: 'C:\\Program Files\\Example\\app.exe', icon: '💻', status: '待处理' as const }; setFolders((prev) => (prev.some((p) => p.path === item.path) ? prev : [item, ...prev])); setSelectedFolderItem(item); setFolder(''); alert('添加应用程序：功能待开发') }}
+          onAddApplication={async () => {
+            const p = await window.api.pickApplication?.()
+            if (!p) { alert('未选择应用程序'); return }
+            const name = p.replace(/\\+/g, '/').split('/').filter(Boolean).pop() || '应用程序'
+            const item = { type: 'application' as const, name, path: p, icon: '💻', status: '待处理' as const }
+            setFolders((prev) => (prev.some((x) => x.path === item.path) ? prev : [item, ...prev]))
+            setSelectedFolderItem(item)
+            setFolder('')
+          }}
           onAddFiletype={() => { const item = { type: 'filetype' as const, name: 'PDF 文件类型', path: 'filetype:.pdf', ext: '.pdf', icon: '📄', status: '待处理' as const }; setFolders((prev) => (prev.some((p) => p.path === item.path) ? prev : [item, ...prev])); setSelectedFolderItem(item); setFolder(''); alert('添加文件类型：功能待开发') }}
         />
 
         <div className="flex-1 overflow-y-auto p-6">
-          <LibraryToolbar
-            onImportIcons={pickIcon}
-            onOpenLibrary={async () => { await window.api.openIconLibraryFolder() }}
-            onRefresh={async () => { const res = await window.api.resetIconLibraryPath(); if (res.ok) await loadLibrary() }}
-            onClearFilter={() => { setRecommendFilterActive(false); setSearchQuery(''); setLibraryPage(1) }}
-            canClear={!!(recommendFilterActive || searchQuery)}
-          />
+      <LibraryToolbar
+        onImportIcons={pickIcon}
+        onImportFromExe={async () => {
+          const p = await window.api.pickApplication?.()
+          if (!p) { alert('未选择可执行文件或DLL'); return }
+          const previews = await window.api.getFileIconPreviews?.(p, 0)
+          const items = previews && previews.ok ? previews.items : []
+          if (!items.length) {
+            alert('无法提取图标预览')
+            return
+          }
+          setSizePickerSourcePath(p)
+          setSizePickerImages(items)
+          setSizePickerOpen(true)
+        }}
+        onOpenLibrary={async () => { await window.api.openIconLibraryFolder() }}
+        onRefresh={async () => { const res = await window.api.resetIconLibraryPath(); if (res.ok) await loadLibrary() }}
+        onClearFilter={() => { setRecommendFilterActive(false); setSearchQuery(''); setLibraryPage(1) }}
+        canClear={!!(recommendFilterActive || searchQuery)}
+      />
 
           <IconLibraryGrid
             libraryLoading={libraryLoading}
@@ -404,6 +452,8 @@ export default function App() {
         <PreviewPanel
           selectedFolderItem={selectedFolderItem}
           folderPreview={folderPreview}
+          shortcutPreview={shortcutPreview}
+          applicationPreview={applicationPreview}
           typeEmoji={typeEmoji}
           iconPreview={iconPreview}
           icon={icon}
@@ -426,6 +476,39 @@ export default function App() {
         onBatchDelete={handleBatchDelete}
       />
     </div>
+
+    {sizePickerOpen ? (
+      <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center no-drag">
+        <div className="bg-card border border-border rounded-xl w-[520px] max-w-[90vw] shadow-xl">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="text-sm font-bold">选择要提取的图标尺寸</div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => { setSizePickerOpen(false); setSizePickerImages([]); setSizePickerSourcePath('') }} className="text-xs">取消</Button>
+            </div>
+          </div>
+          <div className="p-4 grid grid-cols-2 gap-4">
+            {sizePickerImages.map((it, idx) => (
+              <div key={idx} className="border border-border rounded-lg p-3 flex flex-col items-center gap-2">
+                <img src={it.dataUrl} alt={String(it.size)} className="w-16 h-16 object-contain" />
+                <div className="text-xs text-gray-600">{typeof it.size === 'number' ? `${it.size}x${it.size}` : (it.size === 'large' ? '大图标' : '小图标')}</div>
+                <Button className="text-xs" onClick={async () => {
+                  const r = await window.api.extractIconToLibrary?.(sizePickerSourcePath, 0, it.size)
+                  if (r && r.ok) {
+                    await loadLibrary()
+                    setIcon(r.dest)
+                    setSizePickerOpen(false)
+                    setSizePickerImages([])
+                    setSizePickerSourcePath('')
+                  } else {
+                    alert('提取失败')
+                  }
+                }}>选择该尺寸</Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    ) : null}
     <BatchPreviewModal
       open={batchPreviewOpen}
       mode={batchPreviewMode}

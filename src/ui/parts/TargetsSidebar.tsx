@@ -15,7 +15,7 @@ type Props = {
   onTypeFilterChange: (v: 'all' | 'folder' | 'shortcut' | 'application' | 'filetype') => void
   selectedFolderItem: Item | null
   selectedFolderPaths: string[]
-  folderThumbs: Record<string, string>
+  itemThumbs: Record<string, string>
   typeEmoji: Record<'folder' | 'shortcut' | 'application' | 'filetype', string>
   typeLabel: Record<'folder' | 'shortcut' | 'application' | 'filetype', string>
   typeIcon: Record<'folder' | 'shortcut' | 'application' | 'filetype', React.ComponentType<{ className?: string }>>
@@ -31,7 +31,7 @@ type Props = {
 }
 
 export default function TargetsSidebar(props: Props) {
-  const { viewItems, allCount, typeFilter, onTypeFilterChange, selectedFolderItem, selectedFolderPaths, folderThumbs, typeEmoji, typeLabel, typeIcon, typeBadgeClass, onSelectItem, onToggleSelect, onToggleSelectAll, onDeleteItem, onAddFolders, onAddShortcut, onAddApplication, onAddFiletype } = props
+  const { viewItems, allCount, typeFilter, onTypeFilterChange, selectedFolderItem, selectedFolderPaths, itemThumbs, typeEmoji, typeLabel, typeIcon, typeBadgeClass, onSelectItem, onToggleSelect, onToggleSelectAll, onDeleteItem, onAddFolders, onAddShortcut, onAddApplication, onAddFiletype } = props
   const allChecked = viewItems.length !== 0 && viewItems.every((f) => selectedFolderPaths.includes(f.path))
   const someChecked = viewItems.some((f) => selectedFolderPaths.includes(f.path))
   const triState = viewItems.length === 0 ? false : allChecked ? true : someChecked ? 'indeterminate' : false
@@ -65,11 +65,7 @@ export default function TargetsSidebar(props: Props) {
             <div key={idx} onClick={() => { onSelectItem(f) }} className={clsx('p-3 rounded-lg border cursor-pointer transition-all', selectedFolderItem?.path === f.path ? 'border-ring bg-muted' : 'border-border hover:bg-muted')}>
               <div className="flex items-center gap-2 mb-1">
                 <Checkbox checked={selectedFolderPaths.includes(f.path)} onCheckedChange={(checked) => { onToggleSelect(f.path, !!checked) }} onClick={(e) => e.stopPropagation()} />
-                {f.type === 'folder' ? (
-                  folderThumbs[f.path] ? (<img src={folderThumbs[f.path]} alt={f.name} className="w-6 h-6 object-contain" />) : (<span className="text-2xl">{typeEmoji[f.type]}</span>)
-                ) : (
-                  <span className="text-2xl">{typeEmoji[f.type]}</span>
-                )}
+                {itemThumbs[f.path] ? (<img src={itemThumbs[f.path]} alt={f.name} className="w-6 h-6 object-contain" />) : (<span className="text-2xl">{typeEmoji[f.type]}</span>)}
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm text-gray-800 dark:text-white truncate">{f.name}</div>
                   <div className="text-xs text-gray-500 truncate">{f.type === 'filetype' ? (f.ext || '') : f.path}</div>

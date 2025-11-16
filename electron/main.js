@@ -1,9 +1,10 @@
+// main.js
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import os from 'node:os'
-import { execFile, execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import Store from 'electron-store'
 
 const store = new Store({ name: 'settings' })
@@ -130,16 +131,28 @@ function restoreFolderIcon(folder) {
 }
 
 function runShortcutScript(scriptContent, args) {
+  let tmpDir = null
+  let scriptPath = null
   try {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-helper-'))
-    const scriptPath = path.join(tmpDir, 'shortcut.js')
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-helper-'))
+    scriptPath = path.join(tmpDir, 'shortcut.js')
     fs.writeFileSync(scriptPath, scriptContent, { encoding: 'utf8' })
     execFileSync('cscript', ['//nologo', scriptPath, ...args], { windowsHide: true })
     return true
   } catch {
     return false
+  } finally {
+    try { if (scriptPath) fs.unlinkSync(scriptPath) } catch {}
+    try { if (tmpDir) fs.rmdirSync(tmpDir) } catch {}
   }
 }
+// lnk文件图标预览
+// 已迁移到 electron/iconExtractor.js
+// 已迁移到 electron/iconExtractor.js
+
+// 已迁移到 electron/iconExtractor.js
+
+// 已迁移到 electron/iconExtractor.js
 
 function applyShortcutIcon(lnkPath, iconPath) {
   if (!lnkPath || !iconPath) return false
@@ -233,6 +246,12 @@ app.whenReady().then(() => {
     return res.filePaths
   })
 
+  ipcMain.handle('pick-application', async () => {
+    const res = await dialog.showOpenDialog({ filters: [{ name: 'Executables', extensions: ['exe', 'dll'] }], properties: ['openFile'] })
+    if (res.canceled || res.filePaths.length === 0) return ''
+    return res.filePaths[0]
+  })
+
   ipcMain.handle('apply-icon', async (_e, folder, icon) => {
     if (!folder || !icon) return false
     const copied = copyIconToFolder(folder, icon)
@@ -260,9 +279,11 @@ app.whenReady().then(() => {
     try {
       if (!iconPath) return { ok: false, dataUrl: '', size: 0 }
       if (!fs.existsSync(iconPath)) return { ok: false, dataUrl: '', size: 0 }
+      const ext = path.extname(iconPath).toLowerCase()
       const buf = fs.readFileSync(iconPath)
       const b64 = buf.toString('base64')
-      const dataUrl = `data:image/x-icon;base64,${b64}`
+      const mime = ext === '.png' ? 'image/png' : 'image/x-icon'
+      const dataUrl = `data:${mime};base64,${b64}`
       return { ok: true, dataUrl, size: buf.length }
     } catch {
       return { ok: false, dataUrl: '', size: 0 }
@@ -316,6 +337,157 @@ app.whenReady().then(() => {
       }
     } catch {
       return { ok: false }
+    }
+  })
+
+  // 从.lnk快捷方式提取图标预览
+  ipcMain.handle('get-shortcut-preview', async (_e, lnkPath) => {
+    try {
+      console.log('[IPC] 开始提取快捷方式预览:', lnkPath)
+      const { readShortcutInfo: readShortcutInfoExt, extractFileIconDataUrl: extractFileIconDataUrlExt } = await import('./iconExtractor.js')
+      if (!lnkPath) {
+        console.warn('[IPC] 路径为空')
+        return { ok: false, iconPath: '', iconDataUrl: '', fromTarget: false }
+      }
+      if (!fs.existsSync(lnkPath)) {
+        console.warn('[IPC] 文件不存在:', lnkPath)
+        return { ok: false, iconPath: '', iconDataUrl: '', fromTarget: false }
+      }
+      
+      // 读取快捷方式信息，获取图标路径和索引
+      let { iconPath, iconIndex, fromTarget } = await readShortcutInfoExt(lnkPath)
+      console.log('[IPC] 读取图标信息成功:', { iconPath, iconIndex, fromTarget })
+      
+      if ((!iconPath || iconPath.trim() === '') && fromTarget) {
+        console.log('[IPC] iconPath 为空但 fromTarget=true，这是正常的回退行为')
+      } else if (!iconPath || iconPath.trim() === '') {
+        console.warn('[IPC] 无法获取有效的图标路径')
+        return { ok: false, iconPath: '', iconDataUrl: '', fromTarget }
+      }
+      iconPath = iconPath.replace(/%([^%]+)%/g, (_m, n) => (process.env[n] ? String(process.env[n]) : `%${n}%`))
+      console.log('[IPC] 展开环境变量后图标路径:', iconPath)
+      
+      let dataUrl = ''
+      const ext = path.extname(iconPath).toLowerCase()
+      
+      if (!iconPath || !fs.existsSync(iconPath)) {
+        console.warn('[IPC] 图标路径不存在:', iconPath)
+        return { ok: false, iconPath, iconDataUrl: '', fromTarget }
+      }
+      if (ext !== '.ico' && ext !== '.exe' && ext !== '.dll') {
+        console.warn('[IPC] 不支持的图标格式:', ext)
+        return { ok: false, iconPath, iconDataUrl: '', fromTarget }
+      }
+      if (iconPath && fs.existsSync(iconPath) && (ext === '.ico' || ext === '.exe' || ext === '.dll')) {
+        console.log('[IPC] 图标文件存在，准备提取:', { iconPath, iconIndex, ext })
+        dataUrl = await extractFileIconDataUrlExt(iconPath, iconIndex)
+        if (dataUrl) {
+          console.log('[IPC] 第一次提取成功')
+          console.log('[IPC] DataURL 前缀:', dataUrl.substring(0, 60))
+          console.log('[IPC] DataURL 总长度:', dataUrl.length)
+          console.log('[IPC] 是否以 data:image 开头:', dataUrl.startsWith('data:image/'))
+          try {
+            const base64Part = dataUrl.split(',')[1]
+            if (base64Part) {
+              console.log('[IPC] Base64 部分长度:', base64Part.length)
+              console.log('[IPC] Base64 前100字符:', base64Part.substring(0, 100))
+              const buffer = Buffer.from(base64Part, 'base64')
+              console.log('[IPC] Buffer 大小:', buffer.length, 'bytes')
+              const isPNG = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47
+              console.log('[IPC] 是否为有效 PNG:', isPNG)
+            }
+          } catch (err) {
+            console.error('[IPC] Base64 验证失败:', err.message)
+          }
+        } else {
+          console.warn('[IPC] 第一次提取失败，尝试索引 0')
+        }
+        if (!dataUrl) {
+          dataUrl = await extractFileIconDataUrlExt(iconPath, 0)
+          if (dataUrl) {
+            console.log('[IPC] 使用索引 0 提取成功')
+          } else {
+            console.error('[IPC] 所有提取尝试均失败')
+          }
+        }
+      } else {
+        console.warn('[IPC] 图标路径或扩展名不受支持或不存在:', { iconPath, ext })
+      }
+      
+      console.log('[IPC] 提取结果长度:', dataUrl ? dataUrl.length : 0)
+      const result = { ok: true, iconPath, iconDataUrl: dataUrl, fromTarget }
+      console.log('[IPC] 返回结果摘要:', { ok: result.ok, iconPathLength: result.iconPath.length, dataUrlLength: result.iconDataUrl.length, hasDataUrl: !!result.iconDataUrl })
+      return result
+    } catch (err) {
+      console.error('[IPC] 异常:', err)
+      return { ok: false, iconPath: '', iconDataUrl: '', fromTarget: false }
+    }
+  })
+
+  ipcMain.handle('get-file-icon-preview', async (_e, filePath) => {
+    try {
+      const { extractFileIconDataUrl: extractFileIconDataUrlExt } = await import('./iconExtractor.js')
+      if (!filePath) return { ok: false, dataUrl: '' }
+      if (!fs.existsSync(filePath)) return { ok: false, dataUrl: '' }
+      const ext = path.extname(filePath).toLowerCase()
+      if (ext === '.ico' || ext === '.exe' || ext === '.dll') {
+        const png = await extractFileIconDataUrlExt(filePath, 0)
+        return { ok: !!png, dataUrl: png || '' }
+      }
+      return { ok: false, dataUrl: '' }
+    } catch {
+      return { ok: false, dataUrl: '' }
+    }
+  })
+
+  ipcMain.handle('get-file-icon-previews', async (_e, filePath, index = 0) => {
+    try {
+      const { extractFileIconDataUrls: extractFileIconDataUrlsExt } = await import('./iconExtractor.js')
+      if (!filePath) return { ok: false, items: [] }
+      if (!fs.existsSync(filePath)) return { ok: false, items: [] }
+      const ext = path.extname(filePath).toLowerCase()
+      if (ext === '.exe' || ext === '.dll') {
+        const items = await extractFileIconDataUrlsExt(filePath, typeof index === 'number' ? index : 0)
+        return { ok: items.length > 0, items }
+      }
+      if (ext === '.ico') {
+        const buf = fs.readFileSync(filePath)
+        const dataUrl = `data:image/x-icon;base64,${buf.toString('base64')}`
+        return { ok: true, items: [{ size: 'large', dataUrl }] }
+      }
+      return { ok: false, items: [] }
+    } catch {
+      return { ok: false, items: [] }
+    }
+  })
+
+  function extractFileIconToIcoLegacy(filePath, iconIndex, destPath, size) {
+    try {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-helper-'))
+      const scriptPath = path.join(tmpDir, 'save-ico.ps1')
+      const ps = `Add-Type -AssemblyName System.Drawing\nAdd-Type -TypeDefinition @"\nusing System;\nusing System.Runtime.InteropServices;\nusing System.Drawing;\npublic class IconExtractor {\n  [DllImport(\"Shell32.dll\", CharSet=CharSet.Auto)]\n  public static extern uint ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);\n  [DllImport(\"User32.dll\", CharSet=CharSet.Auto)]\n  public static extern uint PrivateExtractIcons(string lpszFile, int nIconIndex, int cxIcon, int cyIcon, IntPtr[] phicon, uint[] piconid, uint nIcons, uint flags);\n  [DllImport(\"User32.dll\", CharSet=CharSet.Auto)]\n  public static extern bool DestroyIcon(IntPtr hIcon);\n  public static IntPtr ExtractSizeHandle(string file, int index, int w, int h) {\n    IntPtr[] arr = new IntPtr[1];\n    uint[] ids = new uint[1];\n    uint got = PrivateExtractIcons(file, index, w, h, arr, ids, 1, 0);\n    if (got == 0) return IntPtr.Zero;\n    return arr[0];\n  }\n  public static IntPtr ExtractIndexHandle(string file, int index, bool large) {\n    IntPtr[] largeIcons = new IntPtr[1];\n    IntPtr[] smallIcons = new IntPtr[1];\n    ExtractIconEx(file, index, large ? largeIcons : null, large ? null : smallIcons, 1);\n    return large ? largeIcons[0] : smallIcons[0];\n  }\n}\n"@ -ReferencedAssemblies System.Drawing\n$path = $args[0]\n$index = [int]$args[1]\n$dest = $args[2]\n$sizeArg = $args[3]\n$w = 48\n$h = 48\nif ($sizeArg -and $sizeArg -eq 'small') { $w = 16; $h = 16 }\nelseif ($sizeArg -and $sizeArg -eq 'large') { $w = 48; $h = 48 }\nelse { try { $w = [int]$sizeArg; $h = $w } catch { } }\n$hIcon = [IconExtractor]::ExtractSizeHandle($path, $index, $w, $h)\nif ($hIcon -eq [IntPtr]::Zero -and $index -lt 0) { $hIcon = [IconExtractor]::ExtractSizeHandle($path, -$index, $w, $h) }\nif ($hIcon -eq [IntPtr]::Zero) { $hIcon = [IconExtractor]::ExtractIndexHandle($path, $index, $true) }\nif ($hIcon -eq [IntPtr]::Zero -and $index -lt 0) { $hIcon = [IconExtractor]::ExtractIndexHandle($path, -$index, $true) }\n$icon = $null\nif ($hIcon -eq [IntPtr]::Zero) { try { $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($path) } catch { } }\nif ($hIcon -ne [IntPtr]::Zero) {\n  $bmp = [System.Drawing.Bitmap]::FromHicon($hIcon)\n  $ms = New-Object System.IO.MemoryStream\n  $bmp.Save($ms,[System.Drawing.Imaging.ImageFormat]::Png)\n  $png = $ms.ToArray()\n  $fs = [System.IO.File]::Create($dest)\n  $bw = New-Object System.IO.BinaryWriter($fs)\n  $bw.Write([UInt16]0)\n  $bw.Write([UInt16]1)\n  $bw.Write([UInt16]1)\n  $wb = 0\n  $hb = 0\n  if ($w -lt 256) { $wb = [Math]::Min($w, 255) }\n  if ($h -lt 256) { $hb = [Math]::Min($h, 255) }\n  $bw.Write([Byte]$wb)\n  $bw.Write([Byte]$hb)\n  $bw.Write([Byte]0)\n  $bw.Write([Byte]0)\n  $bw.Write([UInt16]0)\n  $bw.Write([UInt16]0)\n  $bw.Write([UInt32]$png.Length)\n  $bw.Write([UInt32]22)\n  $bw.Write($png,0,$png.Length)\n  $bw.Close()\n  $fs.Close()\n  [IconExtractor]::DestroyIcon($hIcon) | Out-Null\n} elseif ($icon -ne $null) {\n  $fs = [System.IO.File]::Create($dest)\n  $icon.Save($fs)\n  $fs.Close()\n}`
+      fs.writeFileSync(scriptPath, ps, { encoding: 'utf8' })
+      execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, filePath, String(iconIndex), destPath, String(size || 'large')], { windowsHide: true })
+      return fs.existsSync(destPath)
+    } catch {
+      return false
+    }
+  }
+
+  ipcMain.handle('extract-icon-to-library', async (_e, srcPath, index, size) => {
+    try {
+      const { extractFileIconToIco: extractFileIconToIcoExt } = await import('./iconExtractor.js')
+      if (!srcPath || !fs.existsSync(srcPath)) return { ok: false, dest: '' }
+      const dir = getIconLibraryPath()
+      const base = path.basename(srcPath)
+      const nameNoExt = base.replace(/\.[^.]+$/, '')
+      const suggested = `${nameNoExt}.ico`
+      const targetPath = uniqueTarget(dir, suggested)
+      const sizeArg = (typeof size === 'string') ? size : ((typeof size === 'number') ? String(size) : 'large')
+      const ok = await extractFileIconToIcoExt(srcPath, typeof index === 'number' ? index : 0, targetPath, sizeArg)
+      return { ok, dest: ok ? targetPath : '' }
+    } catch {
+      return { ok: false, dest: '' }
     }
   })
 

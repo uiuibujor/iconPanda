@@ -5,10 +5,14 @@ import { Sparkles } from 'lucide-react'
 
 type Item = { type: 'folder' | 'shortcut' | 'application' | 'filetype'; name: string; path: string; ext?: string }
 type FolderPreview = { ok: boolean; hasDesktopIni: boolean; hasFolderIco: boolean; iconPath: string; iconDataUrl: string } | null
+type ShortcutPreview = { ok: boolean; iconPath: string; iconDataUrl: string; fromTarget: boolean } | null
+type ApplicationPreview = string
 
 type Props = {
   selectedFolderItem: Item | null
   folderPreview: FolderPreview
+  shortcutPreview: ShortcutPreview
+  applicationPreview: ApplicationPreview
   typeEmoji: Record<'folder' | 'shortcut' | 'application' | 'filetype', string>
   iconPreview: string
   icon: string
@@ -22,26 +26,42 @@ type Props = {
 }
 
 export default function PreviewPanel(props: Props) {
-  const { selectedFolderItem, folderPreview, typeEmoji, iconPreview, icon, folder, onApplyIcon, onRestore, onSmartMatch, recommendations, thumbs, onClickRecommendation } = props
+  const { selectedFolderItem, folderPreview, shortcutPreview, applicationPreview, typeEmoji, iconPreview, icon, folder, onApplyIcon, onRestore, onSmartMatch, recommendations, thumbs, onClickRecommendation } = props
   return (
     <div className="w-80 bg-card border-l border-border overflow-y-auto">
       <div className="p-6">
         <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">实时预览</h3>
 
         <div className="bg-card rounded-2xl p-8 mb-4 aspect-square flex items-center justify-center">
-          {selectedFolderItem?.type === 'folder' ? (
-            folderPreview?.iconDataUrl ? (
-              <img src={folderPreview.iconDataUrl} alt={selectedFolderItem?.name || ''} className="w-24 h-24 object-contain" />
-            ) : (
+          {selectedFolderItem?.type === 'folder'
+            ? folderPreview?.iconDataUrl
+              ? (<img src={folderPreview.iconDataUrl} alt={selectedFolderItem?.name || ''} className="w-24 h-24 object-contain" />)
+              : (
+                <div className="text-center">
+                  <div className="text-8xl mb-4">{typeEmoji.folder}</div>
+                </div>
+              )
+            : selectedFolderItem?.type === 'shortcut'
+            ? shortcutPreview?.iconDataUrl
+              ? (<img src={shortcutPreview.iconDataUrl} alt={selectedFolderItem?.name || ''} className="w-24 h-24 object-contain" />)
+              : (
+                <div className="text-center">
+                  <div className="text-8xl mb-4">{typeEmoji.shortcut}</div>
+                </div>
+              )
+            : selectedFolderItem?.type === 'application'
+            ? applicationPreview
+              ? (<img src={applicationPreview} alt={selectedFolderItem?.name || ''} className="w-24 h-24 object-contain" />)
+              : (
+                <div className="text-center">
+                  <div className="text-8xl mb-4">{typeEmoji.application}</div>
+                </div>
+              )
+            : (
               <div className="text-center">
-                <div className="text-8xl mb-4">{typeEmoji.folder}</div>
+                <div className="text-8xl mb-4">{selectedFolderItem ? typeEmoji[selectedFolderItem.type] : '📁'}</div>
               </div>
-            )
-          ) : (
-            <div className="text-center">
-              <div className="text-8xl mb-4">{selectedFolderItem ? typeEmoji[selectedFolderItem.type] : '📁'}</div>
-            </div>
-          )}
+            )}
         </div>
 
         <div className="space-y-3">
@@ -59,17 +79,17 @@ export default function PreviewPanel(props: Props) {
               <CardTitle className="text-xs font-normal text-gray-500 dark:text-gray-400">当前图标</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {selectedFolderItem?.type === 'folder' ? (
+              {selectedFolderItem ? (
                 <div className="flex items-center gap-2">
                   {iconPreview ? (
                     <img src={iconPreview} alt="icon" className="w-10 h-10 object-contain" />
                   ) : (
-                    <span className="text-3xl">📁</span>
+                    <span className="text-3xl">{typeEmoji[selectedFolderItem.type]}</span>
                   )}
                   <div className="text-sm text-gray-800 dark:text-white">{icon ? icon.split(/\\|\//).pop() : '未选择图标(.ico)'}</div>
                 </div>
               ) : (
-                <div className="text-xs text-gray-600 dark:text-gray-400">功能待开发</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400">未选择</div>
               )}
             </CardContent>
           </Card>
