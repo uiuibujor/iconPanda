@@ -6,7 +6,7 @@ import { Sparkles } from 'lucide-react'
 import { OverflowTooltip } from '@/components/ui/tooltip'
 import confetti from 'canvas-confetti'
 
-type Item = { type: 'folder' | 'shortcut' | 'application' | 'filetype'; name: string; path: string; ext?: string }
+type Item = { type: 'folder' | 'shortcut' | 'application'; name: string; path: string; ext?: string }
 type FolderPreview = { ok: boolean; hasDesktopIni: boolean; hasFolderIco: boolean; iconPath: string; iconDataUrl: string } | null
 type ShortcutPreview = { ok: boolean; iconPath: string; iconDataUrl: string; fromTarget: boolean } | null
 type ApplicationPreview = string
@@ -16,7 +16,7 @@ type Props = {
   folderPreview: FolderPreview
   shortcutPreview: ShortcutPreview
   applicationPreview: ApplicationPreview
-  typeEmoji: Record<'folder' | 'shortcut' | 'application' | 'filetype', string>
+  typeEmoji: Record<'folder' | 'shortcut' | 'application', string>
   iconPreview: string
   icon: string
   folder: string
@@ -74,10 +74,10 @@ export default function PreviewPanel(props: Props) {
         <div className="space-y-3">
           <Card className="p-3">
             <CardHeader className="p-0 mb-1">
-              <CardTitle className="text-xs font-normal text-gray-500 dark:text-gray-400">{selectedFolderItem?.type === 'filetype' ? t('文件类型扩展名', 'Filetype Extension') : selectedFolderItem?.type === 'shortcut' ? t('快捷方式路径', 'Shortcut Path') : selectedFolderItem?.type === 'application' ? t('应用程序路径', 'Application Path') : t('文件夹路径', 'Folder Path')}</CardTitle>
+              <CardTitle className="text-xs font-normal text-gray-500 dark:text-gray-400">{selectedFolderItem?.type === 'shortcut' ? t('快捷方式路径', 'Shortcut Path') : selectedFolderItem?.type === 'application' ? t('应用程序路径', 'Application Path') : t('文件夹路径', 'Folder Path')}</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="text-sm text-gray-800 dark:text-white font-mono break-all">{selectedFolderItem?.type === 'filetype' ? (selectedFolderItem?.ext || t('未选择', 'Not selected')) : (selectedFolderItem?.path || folder || t('未选择', 'Not selected'))}</div>
+              <div className="text-sm text-gray-800 dark:text-white font-mono break-all">{selectedFolderItem?.path || folder || t('未选择', 'Not selected')}</div>
             </CardContent>
           </Card>
 

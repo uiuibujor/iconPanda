@@ -1,5 +1,5 @@
 appId: com.icon.helper
-productName: 图标替换助手
+productName: IconPanda
 files:
   - dist/**
   - electron/**

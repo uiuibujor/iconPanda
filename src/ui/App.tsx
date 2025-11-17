@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import { MacScrollbar } from 'mac-scrollbar'
-import { Folder, Link2, FileText, AppWindow } from 'lucide-react'
+import { Folder, Link2, AppWindow } from 'lucide-react'
 import TopBar from './parts/Topbar'
 import TargetsSidebar from './parts/TargetsSidebar'
 import BatchPreviewModal from './parts/BatchPreviewModal'
@@ -65,8 +65,8 @@ export default function App() {
   
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedFolderItem, setSelectedFolderItem] = useState<{ type: 'folder' | 'shortcut' | 'application' | 'filetype'; name: string; path: string; ext?: string; icon: string; status: '已修改' | '待处理' } | null>(null)
-  const [folders, setFolders] = useState<Array<{ type: 'folder' | 'shortcut' | 'application' | 'filetype'; name: string; path: string; ext?: string; icon: string; status: '已修改' | '待处理' }>>([])
+  const [selectedFolderItem, setSelectedFolderItem] = useState<{ type: 'folder' | 'shortcut' | 'application'; name: string; path: string; ext?: string; icon: string; status: '已修改' | '待处理' } | null>(null)
+  const [folders, setFolders] = useState<Array<{ type: 'folder' | 'shortcut' | 'application'; name: string; path: string; ext?: string; icon: string; status: '已修改' | '待处理' }>>([])
   const [selectedLibraryIndex, setSelectedLibraryIndex] = useState<number | null>(null)
   const { libraryIcons, libraryLoading, thumbs, loadLibrary, pickIcon, convertPng } = useIconLibrary((p) => setIcon(p))
   const { isDark, toggleDark } = useTheme()
@@ -81,7 +81,7 @@ export default function App() {
   const [libraryPage, setLibraryPage] = useState(1)
   const [libraryPageSize, setLibraryPageSize] = useState(100)
   const [batchPreviewMode, setBatchPreviewMode] = useState<'match' | 'apply' | 'restore'>('match')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'folder' | 'shortcut' | 'application' | 'filetype'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'folder' | 'shortcut' | 'application'>('all')
 
   const { iconPreview, folderPreview, folderThumbs, itemThumbs, setFolderPreview, setFolderThumbs, setItemThumbs } = usePreviews(icon, folder, folders)
   const [sizePickerOpen, setSizePickerOpen] = useState(false)
@@ -243,28 +243,24 @@ export default function App() {
     setRecommendCycleIndex(0)
   }, [selectedFolderItem, libraryIcons])
 
-  const typeEmoji: Record<'folder' | 'shortcut' | 'application' | 'filetype', string> = { folder: '📁', shortcut: '🔗', application: '💻', filetype: '📄' }
-  const typeLabel: Record<'folder' | 'shortcut' | 'application' | 'filetype', string> = { folder: '文件夹', shortcut: '快捷方式', application: '应用程序', filetype: '文件类型' }
-  const typeBadgeClass = (t: 'folder' | 'shortcut' | 'application' | 'filetype') => (
+  const typeEmoji: Record<'folder' | 'shortcut' | 'application', string> = { folder: '📁', shortcut: '🔗', application: '💻' }
+  const typeLabel: Record<'folder' | 'shortcut' | 'application', string> = { folder: '文件夹', shortcut: '快捷方式', application: '应用程序' }
+  const typeBadgeClass = (t: 'folder' | 'shortcut' | 'application') => (
     t === 'folder'
       ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800'
       : t === 'shortcut'
       ? 'bg-green-50 text-green-600 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800'
-      : t === 'application'
-      ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800'
-      : 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800'
+      : 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800'
   )
-  const typeIcon: Record<'folder' | 'shortcut' | 'application' | 'filetype', React.ComponentType<{ className?: string }>> = {
+  const typeIcon: Record<'folder' | 'shortcut' | 'application', React.ComponentType<{ className?: string }>> = {
     folder: Folder,
     shortcut: Link2,
     application: AppWindow,
-    filetype: FileText,
   }
   const viewItems = useMemo(() => (typeFilter === 'all' ? folders : folders.filter((f) => f.type === typeFilter)), [folders, typeFilter])
   const isApplied = useCallback((p: string) => (selectedFolderItem ? appliedIcons[selectedFolderItem.path] === p : false), [selectedFolderItem, appliedIcons])
   const handleGridApplyOrRestore = useCallback(async (iconPath: string) => {
     if (!selectedFolderItem) return
-    if (selectedFolderItem.type === 'filetype') { alert(locale === 'zh' ? '功能待开发' : 'Work in progress'); return }
     const already = appliedIcons[selectedFolderItem.path] === iconPath
     if (already) {
       let ok = false
@@ -383,7 +379,7 @@ export default function App() {
   const handleClickRecommendation = useCallback((path: string) => { const idx = libraryIcons.findIndex((li) => li.path === path); setSelectedLibraryIndex(idx >= 0 ? idx : null); setIcon(path) }, [libraryIcons])
   const handleBatchApply = useCallback(async () => {
     if (!icon || !selectedFolderPaths.length) return
-    const targets = selectedFolderPaths.filter((p) => { const it = folders.find((f) => f.path === p); return it && it.type !== 'filetype' })
+    const targets = selectedFolderPaths.slice()
     if (!targets.length) { alert(locale === 'zh' ? '请选择文件夹、快捷方式或应用程序' : 'Please select folders, shortcuts, or applications'); return }
     const iname = icon.split(/\\|\//).pop() || ''
     const list: Array<{ folder: string; name: string; iconPath: string; iconName: string; checked: boolean; exact: boolean }> = []
@@ -402,7 +398,7 @@ export default function App() {
   }, [icon, selectedFolderPaths, folders])
   const handleBatchMatch = useCallback(async () => {
     if (!selectedFolderPaths.length || !libraryIcons.length) return
-    const targets = selectedFolderPaths.filter((p) => { const it = folders.find((f) => f.path === p); return it && it.type !== 'filetype' })
+    const targets = selectedFolderPaths.slice()
     if (!targets.length) { alert(locale === 'zh' ? '请选择文件夹、快捷方式或应用程序' : 'Please select folders, shortcuts, or applications'); return }
     const list: Array<{ folder: string; name: string; iconPath: string; iconName: string; checked: boolean; exact: boolean }> = []
     for (const p of targets) {
@@ -423,7 +419,7 @@ export default function App() {
   }, [selectedFolderPaths, libraryIcons, folders])
   const handleBatchRestore = useCallback(async () => {
     if (!selectedFolderPaths.length) return
-    const targets = selectedFolderPaths.filter((p) => { const it = folders.find((f) => f.path === p); return it && it.type !== 'filetype' })
+    const targets = selectedFolderPaths.slice()
     if (!targets.length) { alert(locale === 'zh' ? '请选择文件夹、快捷方式或应用程序' : 'Please select folders, shortcuts, or applications'); return }
     const list: Array<{ folder: string; name: string; iconPath: string; iconName: string; checked: boolean; exact: boolean }> = []
     for (const p of targets) {
@@ -503,7 +499,6 @@ export default function App() {
             setSelectedFolderItem(items[0] || null)
             setFolder('')
           }}
-          onAddFiletype={() => { const item = { type: 'filetype' as const, name: (locale === 'zh' ? 'PDF 文件类型' : 'PDF File Type'), path: 'filetype:.pdf', ext: '.pdf', icon: '📄', status: '待处理' as const }; setFolders((prev) => (prev.some((p) => p.path === item.path) ? prev : [item, ...prev])); setSelectedFolderItem(item); setFolder(''); alert(locale === 'zh' ? '添加文件类型：功能待开发' : 'Add filetype: Work in progress') }}
           isDark={isDark}
           locale={locale}
         />

@@ -2,7 +2,8 @@ import React, { useState } from 'react'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuLabel, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
-import { Search, Settings, Minus, Maximize, Square, X, Folder, Check } from 'lucide-react'
+import { Search, Settings, Minus, Maximize, Square, X, Check } from 'lucide-react'
+const logoSrc = new URL('../../../logo.png', import.meta.url).href
 
 type Props = {
   searchQuery: string
@@ -35,11 +36,11 @@ export default function TopBar(props: Props) {
     <div className="bg-card border-b border-border">
       <div className="flex items-center justify-between px-6 py-3 window-drag" onDoubleClick={() => onToggleMaximize()}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-muted text-foreground flex items-center justify-center">
-            <Folder className="w-6 h-6" />
+          <div className="w-10 h-10 bg-transparent flex items-center justify-center overflow-hidden">
+            <img src={logoSrc} alt="logo" className="w-10 h-10 object-contain" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-800 dark:text-white">{t('图标管理器', 'Icon Manager')}</h1>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white">{t('IconPanda', 'IconPanda')}</h1>
             <p className="text-xs text-gray-500">{t('统一管理不同类型的图标', 'Manage different icon types uniformly')}</p>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-type FolderItem = { type: 'folder' | 'shortcut' | 'application' | 'filetype'; name: string; path: string; ext?: string; icon: string; status: '已修改' | '待处理' }
+type FolderItem = { type: 'folder' | 'shortcut' | 'application'; name: string; path: string; ext?: string; icon: string; status: '已修改' | '待处理' }
 
 export default function usePreviews(icon: string, folder: string, folders: FolderItem[]) {
   const [iconPreview, setIconPreview] = useState('')
