@@ -7,7 +7,9 @@
     "jsx": "react-jsx",
     "strict": true,
     "baseUrl": ".",
-    "paths": {},
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,

@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import { execFileSync } from 'node:child_process'
 import Store from 'electron-store'
+import pngToIco from 'png-to-ico'
 
 const store = new Store({ name: 'settings' })
 
@@ -62,14 +63,14 @@ function importIconToLibrary(srcPath) {
     return { ok: false, dest: '' }
   }
 }
-
+// 窗口创建相关
 function createWindow() {
   const __filename = fileURLToPath(import.meta.url)
   const __dirname = path.dirname(__filename)
   const win = new BrowserWindow({
-    width: 1200,
+    width: 1288,
     height: 800,
-    minWidth: 1035,
+    minWidth: 1288,
     minHeight: 600,
     frame: false,
     autoHideMenuBar: true,
@@ -82,7 +83,7 @@ function createWindow() {
   })
   Menu.setApplicationMenu(null)
   try { win.setMenuBarVisibility(false) } catch {}
-  const devUrl = 'http://localhost:5173'
+  const devUrl = 'http://127.0.0.1:3000'
   win.loadURL(devUrl)
   win.once('ready-to-show', () => {
     try { win.show() } catch {}
@@ -171,6 +172,38 @@ function restoreShortcutIcon(lnkPath) {
   return ok
 }
 
+function createApplicationShortcutWithIcon(exePath, iconPath) {
+  try {
+    if (!exePath || !iconPath) return { ok: false, shortcut: '' }
+    if (!fs.existsSync(exePath) || !fs.existsSync(iconPath)) return { ok: false, shortcut: '' }
+    const desktop = path.join(os.homedir(), 'Desktop')
+    ensureDir(desktop)
+    const base = path.basename(exePath).replace(/\.[^.]+$/, '')
+    const suggested = `${base}.lnk`
+    const shortcutPath = uniqueTarget(desktop, suggested)
+    const content = "var sh=WScript.CreateObject('WScript.Shell');var sp=WScript.Arguments.Item(0);var tp=WScript.Arguments.Item(1);var ip=WScript.Arguments.Item(2);var s=sh.CreateShortcut(sp);s.TargetPath=tp;s.IconLocation=ip+',0';try{s.WorkingDirectory=tp.replace(/\\\\[^\\\\]+$/,'');}catch(e){}s.Save();"
+    const ok = runShortcutScript(content, [shortcutPath, exePath, iconPath])
+    if (ok) refreshIconCache()
+    return { ok, shortcut: ok ? shortcutPath : '' }
+  } catch {
+    return { ok: false, shortcut: '' }
+  }
+}
+
+function deleteShortcutFile(lnkPath) {
+  try {
+    if (!lnkPath) return false
+    if (fs.existsSync(lnkPath)) {
+      fs.unlinkSync(lnkPath)
+      refreshIconCache()
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
 function refreshIconCache() {
   const sysRoot = process.env.SystemRoot || 'C:\\\\Windows'
   const ie4u = path.join(sysRoot, 'System32', 'ie4uinit.exe')
@@ -234,6 +267,12 @@ app.whenReady().then(() => {
     return res.filePaths
   })
 
+  ipcMain.handle('pick-pngs', async () => {
+    const res = await dialog.showOpenDialog({ filters: [{ name: 'PNG Images', extensions: ['png'] }], properties: ['openFile', 'multiSelections'] })
+    if (res.canceled || res.filePaths.length === 0) return []
+    return res.filePaths
+  })
+
   ipcMain.handle('pick-shortcut', async () => {
     const res = await dialog.showOpenDialog({ filters: [{ name: 'Shortcuts', extensions: ['lnk'] }], properties: ['openFile'] })
     if (res.canceled || res.filePaths.length === 0) return ''
@@ -250,6 +289,12 @@ app.whenReady().then(() => {
     const res = await dialog.showOpenDialog({ filters: [{ name: 'Executables', extensions: ['exe', 'dll'] }], properties: ['openFile'] })
     if (res.canceled || res.filePaths.length === 0) return ''
     return res.filePaths[0]
+  })
+
+  ipcMain.handle('pick-applications', async () => {
+    const res = await dialog.showOpenDialog({ filters: [{ name: 'Executables', extensions: ['exe', 'dll'] }], properties: ['openFile', 'multiSelections'] })
+    if (res.canceled || res.filePaths.length === 0) return []
+    return res.filePaths
   })
 
   ipcMain.handle('apply-icon', async (_e, folder, icon) => {
@@ -273,6 +318,15 @@ app.whenReady().then(() => {
 
   ipcMain.handle('restore-shortcut-icon', async (_e, lnk) => {
     return restoreShortcutIcon(lnk)
+  })
+
+  ipcMain.handle('apply-application-icon', async (_e, exe, icon) => {
+    const res = createApplicationShortcutWithIcon(exe, icon)
+    return res
+  })
+
+  ipcMain.handle('restore-application-shortcut', async (_e, lnk) => {
+    return deleteShortcutFile(lnk)
   })
 
   ipcMain.handle('get-icon-preview', async (_e, iconPath) => {
@@ -534,6 +588,28 @@ app.whenReady().then(() => {
       return { ok: !err }
     } catch {
       return { ok: false }
+    }
+  })
+
+  ipcMain.handle('convert-png-to-ico', async (_e, pngPaths) => {
+    try {
+      if (!Array.isArray(pngPaths) || pngPaths.length === 0) return []
+      const dir = getIconLibraryPath()
+      const results = []
+      for (const p of pngPaths) {
+        try {
+          const buf = await pngToIco(p)
+          const base = path.basename(p).replace(/\.[^.]+$/, '')
+          const targetPath = uniqueTarget(dir, `${base}.ico`)
+          fs.writeFileSync(targetPath, buf)
+          results.push({ ok: true, dest: targetPath })
+        } catch {
+          results.push({ ok: false, dest: '' })
+        }
+      }
+      return results
+    } catch {
+      return []
     }
   })
 

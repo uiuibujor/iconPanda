@@ -1,9 +1,10 @@
 import React from 'react'
+import { MacScrollbar } from 'mac-scrollbar'
 import clsx from 'clsx'
-import { Button } from '../../components/ui/button'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/ui/select'
-import { Badge } from '../../components/ui/badge'
-import { Checkbox } from '../../components/ui/checkbox'
+import { Button } from '@/components/ui/button'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Folder, Link2, AppWindow, FileText, Grid3x3 } from 'lucide-react'
 
 type Item = { type: 'folder' | 'shortcut' | 'application' | 'filetype'; name: string; path: string; ext?: string; icon: string; status: '已修改' | '待处理' }
@@ -16,6 +17,7 @@ type Props = {
   selectedFolderItem: Item | null
   selectedFolderPaths: string[]
   itemThumbs: Record<string, string>
+  folderThumbs: Record<string, string>
   typeEmoji: Record<'folder' | 'shortcut' | 'application' | 'filetype', string>
   typeLabel: Record<'folder' | 'shortcut' | 'application' | 'filetype', string>
   typeIcon: Record<'folder' | 'shortcut' | 'application' | 'filetype', React.ComponentType<{ className?: string }>>
@@ -28,15 +30,16 @@ type Props = {
   onAddShortcut: () => void | Promise<void>
   onAddApplication: () => void
   onAddFiletype: () => void
+  isDark: boolean
 }
 
 export default function TargetsSidebar(props: Props) {
-  const { viewItems, allCount, typeFilter, onTypeFilterChange, selectedFolderItem, selectedFolderPaths, itemThumbs, typeEmoji, typeLabel, typeIcon, typeBadgeClass, onSelectItem, onToggleSelect, onToggleSelectAll, onDeleteItem, onAddFolders, onAddShortcut, onAddApplication, onAddFiletype } = props
+  const { viewItems, allCount, typeFilter, onTypeFilterChange, selectedFolderItem, selectedFolderPaths, itemThumbs, folderThumbs, typeEmoji, typeLabel, typeIcon, typeBadgeClass, onSelectItem, onToggleSelect, onToggleSelectAll, onDeleteItem, onAddFolders, onAddShortcut, onAddApplication, onAddFiletype, isDark } = props
   const allChecked = viewItems.length !== 0 && viewItems.every((f) => selectedFolderPaths.includes(f.path))
   const someChecked = viewItems.some((f) => selectedFolderPaths.includes(f.path))
   const triState = viewItems.length === 0 ? false : allChecked ? true : someChecked ? 'indeterminate' : false
   return (
-    <div className="w-64 bg-card border-r border-border overflow-y-auto">
+    <MacScrollbar className="w-64 bg-card border-r border-border" suppressScrollX skin={isDark ? 'dark' : 'light'}>
       <div className="p-4">
         <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 flex items-center justify-between">
           <span>待处理项目</span>
@@ -65,7 +68,11 @@ export default function TargetsSidebar(props: Props) {
             <div key={idx} onClick={() => { onSelectItem(f) }} className={clsx('p-3 rounded-lg border cursor-pointer transition-all', selectedFolderItem?.path === f.path ? 'border-ring bg-muted' : 'border-border hover:bg-muted')}>
               <div className="flex items-center gap-2 mb-1">
                 <Checkbox checked={selectedFolderPaths.includes(f.path)} onCheckedChange={(checked) => { onToggleSelect(f.path, !!checked) }} onClick={(e) => e.stopPropagation()} />
-                {itemThumbs[f.path] ? (<img src={itemThumbs[f.path]} alt={f.name} className="w-6 h-6 object-contain" />) : (<span className="text-2xl">{typeEmoji[f.type]}</span>)}
+                {(f.type === 'folder' ? folderThumbs[f.path] : itemThumbs[f.path]) ? (
+                  <img src={(f.type === 'folder' ? folderThumbs[f.path] : itemThumbs[f.path])} alt={f.name} className="w-6 h-6 object-contain" />
+                ) : (
+                  <span className="text-2xl">{typeEmoji[f.type]}</span>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm text-gray-800 dark:text-white truncate">{f.name}</div>
                   <div className="text-xs text-gray-500 truncate">{f.type === 'filetype' ? (f.ext || '') : f.path}</div>
@@ -104,6 +111,6 @@ export default function TargetsSidebar(props: Props) {
           </Button>
         </div>
       </div>
-    </div>
+    </MacScrollbar>
   )
 }

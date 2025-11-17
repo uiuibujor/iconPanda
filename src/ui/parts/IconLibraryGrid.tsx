@@ -1,6 +1,6 @@
 import React from 'react'
 import clsx from 'clsx'
-import { Button } from '../../components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Check, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react'
 
 type Item = { name: string; path: string }

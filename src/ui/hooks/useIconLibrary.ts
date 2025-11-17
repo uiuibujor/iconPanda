@@ -34,18 +34,36 @@ export default function useIconLibrary(onImported?: (p: string) => void) {
     setLibraryLoading(true)
     try {
       const arr = await window.api.pickIcons?.()
-      if (arr && arr.length) {
-        let last = ''
-        for (const p of arr) { const r = await window.api.importIcon(p); if (r.ok) last = r.dest }
-        if (last && onImported) onImported(last)
-        await loadLibrary()
+      if (arr === undefined) {
+        const i = await window.api.pickIcon()
+        if (!i) return
+        const r = await window.api.importIcon(i)
+        if (r.ok) {
+          if (onImported) onImported(r.dest)
+          await loadLibrary()
+        }
         return
       }
-      const i = await window.api.pickIcon()
-      if (!i) return
-      const r = await window.api.importIcon(i)
-      if (r.ok) {
-        if (onImported) onImported(r.dest)
+      if (!arr.length) return
+      let last = ''
+      for (const p of arr) { const r = await window.api.importIcon(p); if (r.ok) last = r.dest }
+      if (last && onImported) onImported(last)
+      await loadLibrary()
+    } finally {
+      setLibraryLoading(false)
+    }
+  }, [onImported, loadLibrary])
+
+  const convertPng = useCallback(async () => {
+    setLibraryLoading(true)
+    try {
+      const arr = await window.api.pickPngs?.()
+      if (!arr || arr.length === 0) return
+      const results = await window.api.convertPngToIco?.(arr)
+      if (results && Array.isArray(results)) {
+        let last = ''
+        for (const r of results) { if (r.ok) last = r.dest }
+        if (last && onImported) onImported(last)
         await loadLibrary()
       }
     } finally {
@@ -53,5 +71,5 @@ export default function useIconLibrary(onImported?: (p: string) => void) {
     }
   }, [onImported, loadLibrary])
 
-  return { libraryIcons, libraryLoading, thumbs, loadLibrary, pickIcon }
+  return { libraryIcons, libraryLoading, thumbs, loadLibrary, pickIcon, convertPng }
 }

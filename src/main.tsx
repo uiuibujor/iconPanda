@@ -1,6 +1,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './ui/App'
+import 'mac-scrollbar/dist/mac-scrollbar.css'
 import './index.css'
 
 try {

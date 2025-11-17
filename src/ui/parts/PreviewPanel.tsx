@@ -1,7 +1,10 @@
-import React from 'react'
-import { Button } from '../../components/ui/button'
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card'
+import React, { useRef } from 'react'
+import { MacScrollbar } from 'mac-scrollbar'
+import { Button } from '@/components/ui/button'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Sparkles } from 'lucide-react'
+import { OverflowTooltip } from '@/components/ui/tooltip'
+import confetti from 'canvas-confetti'
 
 type Item = { type: 'folder' | 'shortcut' | 'application' | 'filetype'; name: string; path: string; ext?: string }
 type FolderPreview = { ok: boolean; hasDesktopIni: boolean; hasFolderIco: boolean; iconPath: string; iconDataUrl: string } | null
@@ -23,12 +26,14 @@ type Props = {
   recommendations: Array<{ name: string; path: string }>
   thumbs: Record<string, string>
   onClickRecommendation: (path: string) => void
+  isDark: boolean
 }
 
 export default function PreviewPanel(props: Props) {
-  const { selectedFolderItem, folderPreview, shortcutPreview, applicationPreview, typeEmoji, iconPreview, icon, folder, onApplyIcon, onRestore, onSmartMatch, recommendations, thumbs, onClickRecommendation } = props
+  const { selectedFolderItem, folderPreview, shortcutPreview, applicationPreview, typeEmoji, iconPreview, icon, folder, onApplyIcon, onRestore, onSmartMatch, recommendations, thumbs, onClickRecommendation, isDark } = props
+  const applyBtnRef = useRef<HTMLButtonElement | null>(null)
   return (
-    <div className="w-80 bg-card border-l border-border overflow-y-auto">
+    <MacScrollbar className="w-80 bg-card border-l border-border" suppressScrollX skin={isDark ? 'dark' : 'light'}>
       <div className="p-6">
         <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">实时预览</h3>
 
@@ -86,7 +91,9 @@ export default function PreviewPanel(props: Props) {
                   ) : (
                     <span className="text-3xl">{typeEmoji[selectedFolderItem.type]}</span>
                   )}
-                  <div className="text-sm text-gray-800 dark:text-white">{icon ? icon.split(/\\|\//).pop() : '未选择图标(.ico)'}</div>
+                  <OverflowTooltip className="text-sm text-gray-800 dark:text-white truncate max-w-[10rem]" content={icon ? (icon.split(/\\|\//).pop() || '') : '未选择图标(.ico)'}>
+                    {icon ? icon.split(/\\|\//).pop() : '未选择图标(.ico)'}
+                  </OverflowTooltip>
                 </div>
               ) : (
                 <div className="text-xs text-gray-600 dark:text-gray-400">未选择</div>
@@ -95,7 +102,19 @@ export default function PreviewPanel(props: Props) {
           </Card>
 
           <div className="grid grid-cols-2 gap-2">
-            <Button disabled={!icon || !selectedFolderItem || (selectedFolderItem.type === 'folder' ? !folder : selectedFolderItem.type !== 'shortcut')} onClick={onApplyIcon}>
+            <Button ref={applyBtnRef} disabled={!icon || !selectedFolderItem || (selectedFolderItem.type === 'folder' ? !folder : false)} onClick={() => {
+              try {
+                const rect = applyBtnRef.current?.getBoundingClientRect()
+                if (rect) {
+                  const originX = (rect.left + rect.width / 2) / window.innerWidth
+                  const originY = (rect.top + rect.height / 2) / window.innerHeight
+                  confetti({ particleCount: 10, spread: 60, angle: 90, startVelocity: 20, origin: { x: originX, y: originY } })
+                } else {
+                  confetti({ particleCount: 60, spread: 60 })
+                }
+              } catch {}
+              onApplyIcon()
+            }}>
               应用图标
             </Button>
             <Button variant="outline" onClick={onRestore}>
@@ -129,6 +148,6 @@ export default function PreviewPanel(props: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </MacScrollbar>
   )
 }

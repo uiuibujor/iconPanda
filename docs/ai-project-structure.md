@@ -4,10 +4,10 @@
 - 技术栈：Electron + Vite + React + TypeScript
 - UI：Radix UI 组件封装、`lucide-react` 图标、Tailwind 基础样式（见 `src/index.css`）
 - 运行脚本：
-  - 开发：`npm run dev`（Vite + Electron 并行）
-  - 构建：`npm run build`（仅前端构建，生产包由 Electron 启动时加载）
-  - 启动：`npm start`
-  - 打包：`npm run dist`
+  - 开发：`cnpm run dev`（Vite + Electron 并行）
+  - 构建：`cnpm run build`（仅前端构建，生产包由 Electron 启动时加载）
+  - 启动：`cnpm start`
+  - 打包：`cnpm run dist`
 - 主进程入口：`electron/main.js`
 
 ## 目录结构

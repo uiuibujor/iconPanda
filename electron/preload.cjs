@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   pickShortcut: () => ipcRenderer.invoke('pick-shortcut'),
   pickShortcuts: () => ipcRenderer.invoke('pick-shortcuts'),
   pickApplication: () => ipcRenderer.invoke('pick-application'),
+  pickApplications: () => ipcRenderer.invoke('pick-applications'),
   applyIcon: (folder, icon) => ipcRenderer.invoke('apply-icon', folder, icon),
   applyShortcutIcon: (lnk, icon) => ipcRenderer.invoke('apply-shortcut-icon', lnk, icon),
   getIconPreview: (iconPath) => ipcRenderer.invoke('get-icon-preview', iconPath),
@@ -22,8 +23,12 @@ contextBridge.exposeInMainWorld('api', {
   extractIconToLibrary: (srcPath, index, size) => ipcRenderer.invoke('extract-icon-to-library', srcPath, index, size),
   openIconLibraryFolder: () => ipcRenderer.invoke('open-icon-library-folder')
   ,resetIconLibraryPath: () => ipcRenderer.invoke('reset-icon-library-path')
+  ,pickPngs: () => ipcRenderer.invoke('pick-pngs')
+  ,convertPngToIco: (pngPaths) => ipcRenderer.invoke('convert-png-to-ico', pngPaths)
   ,restoreIcon: (folder) => ipcRenderer.invoke('restore-icon', folder)
   ,restoreShortcutIcon: (lnk) => ipcRenderer.invoke('restore-shortcut-icon', lnk)
+  ,applyApplicationIcon: (exe, icon) => ipcRenderer.invoke('apply-application-icon', exe, icon)
+  ,restoreApplicationShortcut: (lnk) => ipcRenderer.invoke('restore-application-shortcut', lnk)
   ,windowMinimize: () => ipcRenderer.invoke('window-minimize')
   ,windowToggleMaximize: () => ipcRenderer.invoke('window-toggle-maximize')
   ,windowIsMaximized: () => ipcRenderer.invoke('window-is-maximized')
