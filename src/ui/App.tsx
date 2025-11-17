@@ -504,34 +504,36 @@ export default function App() {
           locale={locale}
         />
 
-        <MacScrollbar className="flex-1 p-6" suppressScrollX skin={isDark ? 'dark' : 'light'}>
-      <LibraryToolbar
-        onImportIcons={pickIcon}
-        onConvertPng={convertPng}
-        onImportFromExe={async () => {
-          console.log('[UI] onImportFromExe start')
-          const p = await window.api.pickApplication?.()
-          if (!p) return
-          console.log('[UI] onImportFromExe picked', p)
-          const previews = await window.api.getFileIconPreviews?.(p, 0)
-          const items = previews && previews.ok ? previews.items : []
-          console.log('[UI] onImportFromExe previews', { ok: previews?.ok, count: items.length, sizes: items.map((i) => i.size) })
-          if (!items.length) {
-            alert(locale === 'zh' ? '无法提取图标预览' : 'Cannot extract icon previews')
-            return
-          }
-          setSizePickerSourcePath(p)
-          setSizePickerImages(items)
-          setSizePickerOpen(true)
-        }}
-        onOpenLibrary={async () => { await window.api.openIconLibraryFolder() }}
-        onRefresh={async () => { const res = await window.api.resetIconLibraryPath(); if (res.ok) await loadLibrary() }}
-        onClearFilter={() => { setRecommendFilterActive(false); setSearchQuery(''); setLibraryPage(1) }}
-        canClear={!!(recommendFilterActive || searchQuery)}
-        locale={locale}
-      />
-
-          <IconLibraryGrid
+        <div className="flex-1 flex flex-col">
+          <div className="px-6 mt-4">
+            <LibraryToolbar
+              onImportIcons={pickIcon}
+              onConvertPng={convertPng}
+              onImportFromExe={async () => {
+            console.log('[UI] onImportFromExe start')
+            const p = await window.api.pickApplication?.()
+            if (!p) return
+            console.log('[UI] onImportFromExe picked', p)
+            const previews = await window.api.getFileIconPreviews?.(p, 0)
+            const items = previews && previews.ok ? previews.items : []
+            console.log('[UI] onImportFromExe previews', { ok: previews?.ok, count: items.length, sizes: items.map((i) => i.size) })
+            if (!items.length) {
+              alert(locale === 'zh' ? '无法提取图标预览' : 'Cannot extract icon previews')
+              return
+            }
+            setSizePickerSourcePath(p)
+            setSizePickerImages(items)
+            setSizePickerOpen(true)
+              }}
+              onOpenLibrary={async () => { await window.api.openIconLibraryFolder() }}
+              onRefresh={async () => { const res = await window.api.resetIconLibraryPath(); if (res.ok) await loadLibrary() }}
+              onClearFilter={() => { setRecommendFilterActive(false); setSearchQuery(''); setLibraryPage(1) }}
+              canClear={!!(recommendFilterActive || searchQuery)}
+              locale={locale}
+            />
+          </div>
+          <MacScrollbar className="flex-1 px-6 pb-6" suppressScrollX skin={isDark ? 'dark' : 'light'}>
+            <IconLibraryGrid
             libraryLoading={libraryLoading}
             pageItems={pageItems}
             thumbs={thumbs}
@@ -549,8 +551,9 @@ export default function App() {
             onNextPage={() => setLibraryPage((p) => Math.min(pageCount, p + 1))}
             onLastPage={() => setLibraryPage(pageCount)}
             locale={locale}
-          />
-        </MacScrollbar>
+            />
+          </MacScrollbar>
+        </div>
 
         <PreviewPanel
           selectedFolderItem={selectedFolderItem}
