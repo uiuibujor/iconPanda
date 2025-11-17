@@ -480,37 +480,46 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-file-icon-preview', async (_e, filePath) => {
     try {
+      console.log('[IPC] get-file-icon-preview start', { filePath })
       const { extractFileIconDataUrl: extractFileIconDataUrlExt } = await import('./iconExtractor.js')
       if (!filePath) return { ok: false, dataUrl: '' }
       if (!fs.existsSync(filePath)) return { ok: false, dataUrl: '' }
       const ext = path.extname(filePath).toLowerCase()
       if (ext === '.ico' || ext === '.exe' || ext === '.dll') {
         const png = await extractFileIconDataUrlExt(filePath, 0)
+        console.log('[IPC] get-file-icon-preview result', { ok: !!png, length: png ? png.length : 0 })
         return { ok: !!png, dataUrl: png || '' }
       }
+      console.warn('[IPC] get-file-icon-preview unsupported extension', { ext })
       return { ok: false, dataUrl: '' }
     } catch {
+      console.error('[IPC] get-file-icon-preview error')
       return { ok: false, dataUrl: '' }
     }
   })
 
   ipcMain.handle('get-file-icon-previews', async (_e, filePath, index = 0) => {
     try {
+      console.log('[IPC] get-file-icon-previews start', { filePath, index })
       const { extractFileIconDataUrls: extractFileIconDataUrlsExt } = await import('./iconExtractor.js')
       if (!filePath) return { ok: false, items: [] }
       if (!fs.existsSync(filePath)) return { ok: false, items: [] }
       const ext = path.extname(filePath).toLowerCase()
       if (ext === '.exe' || ext === '.dll') {
         const items = await extractFileIconDataUrlsExt(filePath, typeof index === 'number' ? index : 0)
+        console.log('[IPC] get-file-icon-previews items', { count: items.length, sizes: items.map((i) => i.size) })
         return { ok: items.length > 0, items }
       }
       if (ext === '.ico') {
         const buf = fs.readFileSync(filePath)
         const dataUrl = `data:image/x-icon;base64,${buf.toString('base64')}`
+        console.log('[IPC] get-file-icon-previews ico', { length: dataUrl.length })
         return { ok: true, items: [{ size: 'large', dataUrl }] }
       }
+      console.warn('[IPC] get-file-icon-previews unsupported extension', { ext })
       return { ok: false, items: [] }
     } catch {
+      console.error('[IPC] get-file-icon-previews error')
       return { ok: false, items: [] }
     }
   })
@@ -530,7 +539,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('extract-icon-to-library', async (_e, srcPath, index, size) => {
     try {
-      const { extractFileIconToIco: extractFileIconToIcoExt } = await import('./iconExtractor.js')
+      const { extractFileIconDataUrls: extractFileIconDataUrlsExt, extractFileIconDataUrl: extractFileIconDataUrlExt } = await import('./iconExtractor.js')
       if (!srcPath || !fs.existsSync(srcPath)) return { ok: false, dest: '' }
       const dir = getIconLibraryPath()
       const base = path.basename(srcPath)
@@ -538,8 +547,36 @@ app.whenReady().then(() => {
       const suggested = `${nameNoExt}.ico`
       const targetPath = uniqueTarget(dir, suggested)
       const sizeArg = (typeof size === 'string') ? size : ((typeof size === 'number') ? String(size) : 'large')
-      const ok = await extractFileIconToIcoExt(srcPath, typeof index === 'number' ? index : 0, targetPath, sizeArg)
-      return { ok, dest: ok ? targetPath : '' }
+      try {
+        const sizeNum = (sizeArg === 'small') ? 16 : (sizeArg === 'large') ? 48 : parseInt(sizeArg, 10)
+        const items = await extractFileIconDataUrlsExt(srcPath, typeof index === 'number' ? index : 0)
+        let dataUrl = ''
+        const found = items.find((it) => Number(it.size) === Number(sizeNum)) || items.sort((a,b)=>Number(b.size)-Number(a.size))[0]
+        if (found && found.dataUrl) {
+          dataUrl = found.dataUrl
+        } else {
+          const one = await extractFileIconDataUrlExt(srcPath, typeof index === 'number' ? index : 0)
+          dataUrl = one || ''
+        }
+        if (!dataUrl) return { ok: false, dest: '' }
+        const b64 = String(dataUrl).split(',')[1] || ''
+        if (!b64) return { ok: false, dest: '' }
+        const buf = Buffer.from(b64, 'base64')
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-helper-'))
+        const pngPath = path.join(tmp, 'tmp.png')
+        fs.writeFileSync(pngPath, buf)
+        try {
+          const icoBuf = await pngToIco(pngPath)
+          fs.writeFileSync(targetPath, icoBuf)
+        } finally {
+          try { if (fs.existsSync(pngPath)) fs.unlinkSync(pngPath) } catch {}
+          try { if (fs.existsSync(tmp)) fs.rmdirSync(tmp) } catch {}
+        }
+        const ok = fs.existsSync(targetPath)
+        return { ok, dest: ok ? targetPath : '' }
+      } catch {
+        return { ok: false, dest: '' }
+      }
     } catch {
       return { ok: false, dest: '' }
     }

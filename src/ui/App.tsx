@@ -480,10 +480,13 @@ export default function App() {
         onImportIcons={pickIcon}
         onConvertPng={convertPng}
         onImportFromExe={async () => {
+          console.log('[UI] onImportFromExe start')
           const p = await window.api.pickApplication?.()
           if (!p) return
+          console.log('[UI] onImportFromExe picked', p)
           const previews = await window.api.getFileIconPreviews?.(p, 0)
           const items = previews && previews.ok ? previews.items : []
+          console.log('[UI] onImportFromExe previews', { ok: previews?.ok, count: items.length, sizes: items.map((i) => i.size) })
           if (!items.length) {
             alert('无法提取图标预览')
             return
@@ -561,14 +564,17 @@ export default function App() {
                 <img src={it.dataUrl} alt={String(it.size)} className="w-16 h-16 object-contain" />
                 <div className="text-xs text-gray-600">{typeof it.size === 'number' ? `${it.size}x${it.size}` : (it.size === 'large' ? '大图标' : '小图标')}</div>
                 <Button className="text-xs" onClick={async () => {
+                  console.log('[UI] onPickSize start', { src: sizePickerSourcePath, size: it.size })
                   const r = await window.api.extractIconToLibrary?.(sizePickerSourcePath, 0, it.size)
                   if (r && r.ok) {
+                    console.log('[UI] onPickSize success', r)
                     await loadLibrary()
                     setIcon(r.dest)
                     setSizePickerOpen(false)
                     setSizePickerImages([])
                     setSizePickerSourcePath('')
                   } else {
+                    console.error('[UI] onPickSize failed', r)
                     alert('提取失败')
                   }
                 }}>选择该尺寸</Button>

@@ -288,6 +288,7 @@ export async function extractFileIconDataUrl(filePath, iconIndex) {
   let scriptPath = null;
   
   try {
+    console.log('[Extractor] extractFileIconDataUrl start', { filePath, iconIndex })
     // 验证输入
     if (!filePath || !fs.existsSync(filePath)) {
       console.warn(`[extractFileIconDataUrl] 文件不存在: ${filePath}`);
@@ -414,6 +415,7 @@ if ($result) {
     console.error('[extractFileIconDataUrl] 异常:', err);
     return '';
   } finally {
+    console.log('[Extractor] extractFileIconDataUrl cleanup')
     // 清理临时文件
     try { 
       if (scriptPath && fs.existsSync(scriptPath)) {
@@ -433,4 +435,202 @@ if ($result) {
   }
 }
 
+export async function extractFileIconDataUrls(filePath, iconIndex = 0) {
+  let tmpDir = null;
+  let scriptPath = null;
+  try {
+    console.log('[Extractor] extractFileIconDataUrls start', { filePath, iconIndex })
+    if (!filePath || !fs.existsSync(filePath)) {
+      return [];
+    }
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-helper-'));
+    scriptPath = path.join(tmpDir, 'extract-icons.ps1');
+    const ps = `$ErrorActionPreference = 'SilentlyContinue'
+Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Drawing;
+public class IconExtractor {
+  [DllImport("Shell32.dll", CharSet=CharSet.Auto)]
+  public static extern uint ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);
+  [DllImport("User32.dll", CharSet=CharSet.Auto)]
+  public static extern uint PrivateExtractIcons(string lpszFile, int nIconIndex, int cxIcon, int cyIcon, IntPtr[] phicon, uint[] piconid, uint nIcons, uint flags);
+  [DllImport("User32.dll", CharSet=CharSet.Auto)]
+  public static extern bool DestroyIcon(IntPtr hIcon);
+  public static IntPtr ExtractSizeHandle(string file, int index, int w, int h) {
+    IntPtr[] arr = new IntPtr[1];
+    uint[] ids = new uint[1];
+    uint got = PrivateExtractIcons(file, index, w, h, arr, ids, 1, 0);
+    if (got == 0) return IntPtr.Zero;
+    return arr[0];
+  }
+}
+"@ -ReferencedAssemblies System.Drawing -WarningAction SilentlyContinue -ErrorAction SilentlyContinue | Out-Null
+
+function GetSizeBase64($path, $index, $w, $h) {
+  $result = ''
+  try {
+    $hIcon = [IconExtractor]::ExtractSizeHandle($path, $index, $w, $h)
+    if ($hIcon -eq [IntPtr]::Zero -and $index -lt 0) { $hIcon = [IconExtractor]::ExtractSizeHandle($path, -$index, $w, $h) }
+    if ($hIcon -ne [IntPtr]::Zero) {
+      $ms = New-Object System.IO.MemoryStream
+      $bmp = [System.Drawing.Bitmap]::FromHicon($hIcon)
+      $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+      $result = [Convert]::ToBase64String($ms.ToArray())
+      [IconExtractor]::DestroyIcon($hIcon) | Out-Null
+      $ms.Dispose()
+      $bmp.Dispose()
+    } else {
+      try {
+        $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($path)
+        if ($icon -ne $null) {
+          $bmp = $icon.ToBitmap()
+          $resized = New-Object System.Drawing.Bitmap $w,$h
+          $g = [System.Drawing.Graphics]::FromImage($resized)
+          $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+          $g.DrawImage($bmp, 0, 0, $w, $h)
+          $g.Dispose()
+          $ms = New-Object System.IO.MemoryStream
+          $resized.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+          $result = [Convert]::ToBase64String($ms.ToArray())
+          $ms.Dispose()
+          $resized.Dispose()
+          $bmp.Dispose()
+        }
+      } catch { }
+    }
+  } catch { }
+  return $result
+}
+
+$path = $args[0]
+$index = [int]$args[1]
+$b16 = GetSizeBase64 $path $index 16 16
+$b32 = GetSizeBase64 $path $index 32 32
+$b48 = GetSizeBase64 $path $index 48 48
+$b256 = GetSizeBase64 $path $index 256 256
+if ($b16) { Write-Output "16:$b16" }
+if ($b32) { Write-Output "32:$b32" }
+if ($b48) { Write-Output "48:$b48" }
+if ($b256) { Write-Output "256:$b256" }`
+    fs.writeFileSync(scriptPath, ps, { encoding: 'utf8' });
+    const stdout = await new Promise((resolve) => {
+      execFile(
+        'powershell',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, filePath, String(iconIndex)],
+        { windowsHide: true, encoding: 'utf8', timeout: 15000, maxBuffer: 10 * 1024 * 1024 },
+        (err, out, stderr) => { 
+          if (err) console.error('[extractFileIconDataUrls] PowerShell 错误:', err.message)
+          if (stderr) console.error('[extractFileIconDataUrls] stderr:', stderr)
+          resolve(typeof out === 'string' ? out : String(out)) 
+        }
+      );
+    });
+    const items = [];
+    const lines = String(stdout || '').trim().split(/\r?\n/).filter(Boolean);
+    console.log('[Extractor] extractFileIconDataUrls raw lines', { count: lines.length })
+    for (const line of lines) {
+      const m = line.match(/^([0-9]+|small|large):([A-Za-z0-9+/=]+)$/);
+      if (!m) continue;
+      const sizeRaw = m[1];
+      const b64 = m[2];
+      const num = (sizeRaw === 'small') ? 16 : (sizeRaw === 'large') ? 48 : parseInt(sizeRaw, 10);
+      items.push({ size: num, dataUrl: `data:image/png;base64,${b64}` });
+    }
+    console.log('[Extractor] extractFileIconDataUrls parsed items', { sizes: items.map((i) => i.size), count: items.length })
+    return items;
+  } catch {
+    console.error('[Extractor] extractFileIconDataUrls error')
+    return [];
+  } finally {
+    console.log('[Extractor] extractFileIconDataUrls cleanup')
+    try { if (scriptPath && fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath) } catch {}
+    try { if (tmpDir && fs.existsSync(tmpDir)) fs.rmdirSync(tmpDir) } catch {}
+  }
+}
+
+export async function extractFileIconToIco(filePath, iconIndex, destPath, size) {
+  let tmpDir = null;
+  let scriptPath = null;
+  try {
+    console.log('[Extractor] extractFileIconToIco start', { filePath, iconIndex, destPath, size })
+    if (!filePath || !fs.existsSync(filePath)) {
+      return false;
+    }
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-helper-'));
+    scriptPath = path.join(tmpDir, 'save-ico.ps1');
+    const ps = `Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Drawing;
+public class IconExtractor {
+  [DllImport("Shell32.dll", CharSet=CharSet.Auto)]
+  public static extern uint ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);
+  [DllImport("User32.dll", CharSet=CharSet.Auto)]
+  public static extern uint PrivateExtractIcons(string lpszFile, int nIconIndex, int cxIcon, int cyIcon, IntPtr[] phicon, uint[] piconid, uint nIcons, uint flags);
+  [DllImport("User32.dll", CharSet=CharSet.Auto)]
+  public static extern bool DestroyIcon(IntPtr hIcon);
+  public static IntPtr ExtractSizeHandle(string file, int index, int w, int h) {
+    IntPtr[] arr = new IntPtr[1];
+    uint[] ids = new uint[1];
+    uint got = PrivateExtractIcons(file, index, w, h, arr, ids, 1, 0);
+    if (got == 0) return IntPtr.Zero;
+    return arr[0];
+  }
+  public static IntPtr ExtractIndexHandle(string file, int index, bool large) {
+    IntPtr[] largeIcons = new IntPtr[1];
+    IntPtr[] smallIcons = new IntPtr[1];
+    ExtractIconEx(file, index, large ? largeIcons : null, large ? null : smallIcons, 1);
+    return large ? largeIcons[0] : smallIcons[0];
+  }
+}
+"@ -ReferencedAssemblies System.Drawing
+$path = $args[0]
+$index = [int]$args[1]
+$dest = $args[2]
+$sizeArg = $args[3]
+$w = 48
+$h = 48
+if ($sizeArg -and $sizeArg -eq 'small') { $w = 16; $h = 16 }
+elseif ($sizeArg -and $sizeArg -eq 'large') { $w = 48; $h = 48 }
+else { try { $w = [int]$sizeArg; $h = $w } catch { } }
+$hIcon = [IconExtractor]::ExtractSizeHandle($path, $index, $w, $h)
+if ($hIcon -eq [IntPtr]::Zero -and $index -lt 0) { $hIcon = [IconExtractor]::ExtractSizeHandle($path, -$index, $w, $h) }
+if ($hIcon -eq [IntPtr]::Zero) { $hIcon = [IconExtractor]::ExtractIndexHandle($path, $index, $true) }
+if ($hIcon -eq [IntPtr]::Zero -and $index -lt 0) { $hIcon = [IconExtractor]::ExtractIndexHandle($path, -$index, $true) }
+if ($hIcon -ne [IntPtr]::Zero) {
+  try {
+    $icon = [System.Drawing.Icon]::FromHandle($hIcon)
+    $fs = [System.IO.File]::Open($dest, [System.IO.FileMode]::Create)
+    $icon.Save($fs)
+    $fs.Close()
+  } catch { }
+  [IconExtractor]::DestroyIcon($hIcon) | Out-Null
+}`;
+    fs.writeFileSync(scriptPath, ps, { encoding: 'utf8' });
+    await new Promise((resolve) => {
+      execFile(
+        'powershell',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, filePath, String(iconIndex), destPath, String(size || 'large')],
+        { windowsHide: true, encoding: 'utf8', timeout: 15000 },
+        (err, _out, stderr) => { 
+          if (err) console.error('[extractFileIconToIco] PowerShell 错误:', err.message)
+          if (stderr) console.error('[extractFileIconToIco] stderr:', stderr)
+          resolve(null) 
+        }
+      );
+    });
+    console.log('[Extractor] extractFileIconToIco result', { exists: fs.existsSync(destPath) })
+    return fs.existsSync(destPath);
+  } catch {
+    console.error('[Extractor] extractFileIconToIco error')
+    return false;
+  } finally {
+    console.log('[Extractor] extractFileIconToIco cleanup')
+    try { if (scriptPath && fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath) } catch {}
+    try { if (tmpDir && fs.existsSync(tmpDir)) fs.rmdirSync(tmpDir) } catch {}
+  }
+}
 // ... 其他函数保持不变（extractFileIconDataUrls、extractFileIconToIco）
