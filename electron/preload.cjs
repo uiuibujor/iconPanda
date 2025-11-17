@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('api', {
   ,resetIconLibraryPath: () => ipcRenderer.invoke('reset-icon-library-path')
   ,pickPngs: () => ipcRenderer.invoke('pick-pngs')
   ,convertPngToIco: (pngPaths) => ipcRenderer.invoke('convert-png-to-ico', pngPaths)
+  ,deleteLibraryIcon: (iconPath) => ipcRenderer.invoke('delete-library-icon', iconPath)
   ,restoreIcon: (folder) => ipcRenderer.invoke('restore-icon', folder)
   ,restoreShortcutIcon: (lnk) => ipcRenderer.invoke('restore-shortcut-icon', lnk)
   ,applyApplicationIcon: (exe, icon) => ipcRenderer.invoke('apply-application-icon', exe, icon)

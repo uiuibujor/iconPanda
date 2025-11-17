@@ -10,6 +10,16 @@
     "start": "electron .",
     "dist": "electron-builder"
   },
+  "build": {
+    "appId": "com.iconhelper.app",
+    "productName": "IconPanda",
+    "directories": {
+      "buildResources": "build"
+    },
+    "win": {
+      "icon": "build/icons/icon.ico"
+    }
+  },
   "dependencies": {
     "@better-upload/client": "^3.0.2",
     "@radix-ui/react-checkbox": "^1.3.3",

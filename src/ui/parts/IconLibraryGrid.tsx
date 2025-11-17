@@ -1,7 +1,7 @@
 import React from 'react'
 import clsx from 'clsx'
-import { Button } from '@/components/ui/button'
-import { Check, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react'
+  import { Button } from '@/components/ui/button'
+import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, X } from 'lucide-react'
 
 type Item = { name: string; path: string }
 
@@ -13,6 +13,7 @@ type Props = {
   isApplied: (iconPath: string) => boolean
   onSelectIcon: (iconPath: string) => void
   onApplyOrRestore: (iconPath: string) => void | Promise<void>
+  onDeleteIcon: (iconPath: string) => void | Promise<void>
   empty: boolean
   libraryPage: number
   pageCount: number
@@ -25,7 +26,7 @@ type Props = {
 }
 
 export default function IconLibraryGrid(props: Props) {
-  const { libraryLoading, pageItems, thumbs, icon, isApplied, onSelectIcon, onApplyOrRestore, empty, libraryPage, pageCount, filteredCount, onFirstPage, onPrevPage, onNextPage, onLastPage, locale = 'zh' } = props
+  const { libraryLoading, pageItems, thumbs, icon, isApplied, onSelectIcon, onApplyOrRestore, onDeleteIcon, empty, libraryPage, pageCount, filteredCount, onFirstPage, onPrevPage, onNextPage, onLastPage, locale = 'zh' } = props
   const t = (zh: string, en: string) => (locale === 'zh' ? zh : en)
   return (
     <>
@@ -54,21 +55,16 @@ export default function IconLibraryGrid(props: Props) {
               </div>
               <div className="text-xs text-center text-gray-600 dark:text-gray-400 truncate">{it.name}</div>
               <Button
-                onClick={async (e) => { e.stopPropagation(); await onApplyOrRestore(it.path) }}
-                title={t('应用此图标', 'Apply this icon')}
+                onClick={async (e) => { e.stopPropagation(); await onDeleteIcon(it.path) }}
+                title={t('删除此图标', 'Delete this icon')}
                 className={clsx(
-                  'absolute top-2 right-2 opacity-0 group-hover:opacity-100 rounded-full transition-opacity transition-colors duration-200 ease-out flex items-center justify-center',
-                  isApplied(it.path)
-                    ? 'bg-muted text-foreground min-w-[50px] h-6 hover:ring-1 hover:ring-border'
-                    : 'bg-transparent border border-border text-foreground min-w-[50px] h-6 text-[9px] hover:ring-1 hover:ring-border'
+                  'absolute -top-2.5 -right-2 z-10 opacity-0 group-hover:opacity-100 rounded-full w-4 h-4 p-0 transition-opacity transition-colors duration-200 ease-out',
+                  'border border-destructive text-white bg-destructive hover:bg-destructive'
                 )}
               >
-                {isApplied(it.path) ? (
-                  <Check className="w-3 h-3 apply-btn-check" />
-                ) : (
-                  <span className="apply-btn-text">{t('应用', 'Apply')}</span>
-                )}
+                <X className="w-2.5 h-2.5" strokeWidth={4} />
               </Button>
+              
             </div>
           ))
         )}

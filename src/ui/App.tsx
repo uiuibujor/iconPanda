@@ -46,6 +46,7 @@ declare global {
       extractIconToLibrary?: (srcPath: string, index?: number, size?: 'small' | 'large' | number) => Promise<{ ok: boolean; dest: string }>
       openIconLibraryFolder: () => Promise<{ ok: boolean }>
       resetIconLibraryPath: () => Promise<{ ok: boolean; path?: string }>
+      deleteLibraryIcon?: (iconPath: string) => Promise<boolean>
       restoreIcon: (folder: string) => Promise<boolean>
       restoreShortcutIcon?: (lnk: string) => Promise<boolean>
       restoreApplicationShortcut?: (lnk: string) => Promise<boolean>
@@ -68,7 +69,7 @@ export default function App() {
   const [selectedFolderItem, setSelectedFolderItem] = useState<{ type: 'folder' | 'shortcut' | 'application'; name: string; path: string; ext?: string; icon: string; status: '已修改' | '待处理' } | null>(null)
   const [folders, setFolders] = useState<Array<{ type: 'folder' | 'shortcut' | 'application'; name: string; path: string; ext?: string; icon: string; status: '已修改' | '待处理' }>>([])
   const [selectedLibraryIndex, setSelectedLibraryIndex] = useState<number | null>(null)
-  const { libraryIcons, libraryLoading, thumbs, loadLibrary, pickIcon, convertPng } = useIconLibrary((p) => setIcon(p))
+  const { libraryIcons, libraryLoading, thumbs, loadLibrary, pickIcon, convertPng, deleteIcon } = useIconLibrary((p) => setIcon(p))
   const { isDark, toggleDark } = useTheme()
   const { isMaximized, minimize, toggleMaximize, close } = useWindowControls()
   const [appliedIcons, setAppliedIcons] = useState<Record<string, string>>({})
@@ -538,6 +539,7 @@ export default function App() {
             isApplied={isApplied}
             onSelectIcon={(p) => setIcon(p)}
             onApplyOrRestore={handleGridApplyOrRestore}
+            onDeleteIcon={(p) => deleteIcon(p)}
             empty={libraryIcons.length === 0}
             libraryPage={libraryPage}
             pageCount={pageCount}

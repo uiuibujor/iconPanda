@@ -75,6 +75,7 @@ function createWindow() {
     frame: false,
     autoHideMenuBar: true,
     show: false,
+    icon: path.join(__dirname, '../build/icons/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -624,6 +625,23 @@ app.whenReady().then(() => {
   ipcMain.handle('import-icon', async (_e, srcPath) => {
     const res = importIconToLibrary(srcPath)
     return res
+  })
+
+  ipcMain.handle('delete-library-icon', async (_e, iconPath) => {
+    try {
+      const dir = getIconLibraryPath()
+      if (!iconPath || typeof iconPath !== 'string') return false
+      const abs = path.resolve(iconPath)
+      const inLib = abs.toLowerCase().startsWith(path.resolve(dir).toLowerCase())
+      if (!inLib || !abs.toLowerCase().endsWith('.ico')) return false
+      if (fs.existsSync(abs)) {
+        fs.unlinkSync(abs)
+        return true
+      }
+      return false
+    } catch {
+      return false
+    }
   })
 
   ipcMain.handle('open-icon-library-folder', async () => {

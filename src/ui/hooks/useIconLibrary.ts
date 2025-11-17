@@ -71,5 +71,15 @@ export default function useIconLibrary(onImported?: (p: string) => void) {
     }
   }, [onImported, loadLibrary])
 
-  return { libraryIcons, libraryLoading, thumbs, loadLibrary, pickIcon, convertPng }
+  const deleteIcon = useCallback(async (p: string) => {
+    setLibraryLoading(true)
+    try {
+      const ok = await window.api.deleteLibraryIcon?.(p)
+      if (ok) await loadLibrary()
+    } finally {
+      setLibraryLoading(false)
+    }
+  }, [loadLibrary])
+
+  return { libraryIcons, libraryLoading, thumbs, loadLibrary, pickIcon, convertPng, deleteIcon }
 }
