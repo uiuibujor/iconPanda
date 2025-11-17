@@ -21,10 +21,12 @@ type Props = {
   onPrevPage: () => void
   onNextPage: () => void
   onLastPage: () => void
+  locale?: 'zh' | 'en'
 }
 
 export default function IconLibraryGrid(props: Props) {
-  const { libraryLoading, pageItems, thumbs, icon, isApplied, onSelectIcon, onApplyOrRestore, empty, libraryPage, pageCount, filteredCount, onFirstPage, onPrevPage, onNextPage, onLastPage } = props
+  const { libraryLoading, pageItems, thumbs, icon, isApplied, onSelectIcon, onApplyOrRestore, empty, libraryPage, pageCount, filteredCount, onFirstPage, onPrevPage, onNextPage, onLastPage, locale = 'zh' } = props
+  const t = (zh: string, en: string) => (locale === 'zh' ? zh : en)
   return (
     <>
       <div className={'flex flex-wrap gap-4 min-h-[160px]'}>
@@ -53,7 +55,7 @@ export default function IconLibraryGrid(props: Props) {
               <div className="text-xs text-center text-gray-600 dark:text-gray-400 truncate">{it.name}</div>
               <Button
                 onClick={async (e) => { e.stopPropagation(); await onApplyOrRestore(it.path) }}
-                title="应用此图标"
+                title={t('应用此图标', 'Apply this icon')}
                 className={clsx(
                   'absolute top-2 right-2 opacity-0 group-hover:opacity-100 rounded-full transition-opacity transition-colors duration-200 ease-out flex items-center justify-center',
                   isApplied(it.path)
@@ -64,18 +66,18 @@ export default function IconLibraryGrid(props: Props) {
                 {isApplied(it.path) ? (
                   <Check className="w-3 h-3 apply-btn-check" />
                 ) : (
-                  <span className="apply-btn-text">应用</span>
+                  <span className="apply-btn-text">{t('应用', 'Apply')}</span>
                 )}
               </Button>
             </div>
           ))
         )}
         {empty ? (
-          <div className="col-span-8 text-center text-sm text-gray-500 dark:text-gray-400 py-8">图标库为空，点击“导入图标(.ico)”进行导入</div>
+          <div className="col-span-8 text-center text-sm text-gray-500 dark:text-gray-400 py-8">{t('图标库为空，点击“导入图标(.ico)”进行导入', 'Library is empty, click "Import icons (.ico)" to add')}</div>
         ) : null}
       </div>
       <div className="mt-4 flex items-center justify-center gap-3">
-        <span className="text-xs text-gray-600 dark:text-gray-400">第 {Math.min(libraryPage, pageCount)} / {pageCount} 页 · 共 {filteredCount} 项</span>
+        <span className="text-xs text-gray-600 dark:text-gray-400">{locale === 'zh' ? `第 ${Math.min(libraryPage, pageCount)} / ${pageCount} 页 · 共 ${filteredCount} 项` : `Page ${Math.min(libraryPage, pageCount)} / ${pageCount} · Total ${filteredCount} items`}</span>
         <Button variant="outline" className="w-9 h-9 p-0 rounded-xl" onClick={onFirstPage} disabled={libraryPage <= 1}>
           <ChevronsLeft className="w-4 h-4" />
         </Button>

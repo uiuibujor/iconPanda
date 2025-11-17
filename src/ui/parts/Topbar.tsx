@@ -1,7 +1,8 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
-import { Search, Settings, Minus, Maximize, Square, X, Folder } from 'lucide-react'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuLabel, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
+import { Search, Settings, Minus, Maximize, Square, X, Folder, Check } from 'lucide-react'
 
 type Props = {
   searchQuery: string
@@ -12,11 +13,24 @@ type Props = {
   onMinimize: () => void | Promise<void>
   onToggleMaximize: () => void | Promise<void>
   onClose: () => void | Promise<void>
-  onSettingsClick: () => void
+  locale: 'zh' | 'en'
+  onChangeLocale: (l: 'zh' | 'en') => void
+  appVersion?: string
+  onCopyGithub: () => Promise<boolean> | boolean
 }
 
 export default function TopBar(props: Props) {
-  const { searchQuery, onSearchChange, isDark, onToggleDark, isMaximized, onMinimize, onToggleMaximize, onClose, onSettingsClick } = props
+  const { searchQuery, onSearchChange, isDark, onToggleDark, isMaximized, onMinimize, onToggleMaximize, onClose, locale, onChangeLocale, appVersion, onCopyGithub } = props
+  const t = (zh: string, en: string) => (locale === 'zh' ? zh : en)
+  const [copied, setCopied] = useState(false)
+  const handleCopyGithub = async (e: Event | React.SyntheticEvent) => {
+    e?.preventDefault?.()
+    const ok = await onCopyGithub()
+    if (ok) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    }
+  }
   return (
     <div className="bg-card border-b border-border">
       <div className="flex items-center justify-between px-6 py-3 window-drag" onDoubleClick={() => onToggleMaximize()}>
@@ -25,18 +39,48 @@ export default function TopBar(props: Props) {
             <Folder className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-800 dark:text-white">图标管理器</h1>
-            <p className="text-xs text-gray-500">统一管理不同类型的图标</p>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white">{t('图标管理器', 'Icon Manager')}</h1>
+            <p className="text-xs text-gray-500">{t('统一管理不同类型的图标', 'Manage different icon types uniformly')}</p>
           </div>
         </div>
         <div className="flex items-center gap-3 no-drag">
           <div className="relative no-drag">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="搜索图标..." className="pl-10 pr-4 w-64" />
+            <Input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder={t('搜索图标...', 'Search icons...')} className="pl-10 pr-4 w-64" />
           </div>
-          <Button variant="ghost" size="icon" onClick={onSettingsClick}>
-            <Settings className="w-5 h-5" />
-          </Button>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="cursor-default" aria-label={t('打开设置', 'Open settings')}>
+                <Settings className="w-5 h-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-44" align="end">
+              <DropdownMenuLabel>{t('设置', 'Settings')}</DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuItem onSelect={() => onChangeLocale('zh')} onClick={() => onChangeLocale('zh')}>
+                  中文
+                  {locale === 'zh' ? <Check className="w-3 h-3 ml-auto" /> : <span className="w-3 h-3 ml-auto" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onChangeLocale('en')} onClick={() => onChangeLocale('en')}>
+                  English
+                  {locale === 'en' ? <Check className="w-3 h-3 ml-auto" /> : <span className="w-3 h-3 ml-auto" />}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>{t('关于', 'About')}</DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuItem className="relative" onSelect={handleCopyGithub as any} onClick={handleCopyGithub as any}>
+                  GitHub
+                  {copied ? (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 bg-foreground text-background text-[10px] px-2 py-1 rounded shadow">
+                      {t('链接已复制', 'Link copied')}
+                    </span>
+                  ) : null}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled>{t('版本号', 'Version')}: {appVersion || '-'}</DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <label className="toggle no-drag" aria-label="主题切换">
             <input type="checkbox" className="input" id="switch" checked={isDark} onChange={onToggleDark} />
             <div className="icon icon--moon">

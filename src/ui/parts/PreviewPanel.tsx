@@ -27,15 +27,17 @@ type Props = {
   thumbs: Record<string, string>
   onClickRecommendation: (path: string) => void
   isDark: boolean
+  locale?: 'zh' | 'en'
 }
 
 export default function PreviewPanel(props: Props) {
-  const { selectedFolderItem, folderPreview, shortcutPreview, applicationPreview, typeEmoji, iconPreview, icon, folder, onApplyIcon, onRestore, onSmartMatch, recommendations, thumbs, onClickRecommendation, isDark } = props
+  const { selectedFolderItem, folderPreview, shortcutPreview, applicationPreview, typeEmoji, iconPreview, icon, folder, onApplyIcon, onRestore, onSmartMatch, recommendations, thumbs, onClickRecommendation, isDark, locale = 'zh' } = props
+  const t = (zh: string, en: string) => (locale === 'zh' ? zh : en)
   const applyBtnRef = useRef<HTMLButtonElement | null>(null)
   return (
     <MacScrollbar className="w-80 bg-card border-l border-border" suppressScrollX skin={isDark ? 'dark' : 'light'}>
       <div className="p-6">
-        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">实时预览</h3>
+        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">{t('实时预览', 'Live Preview')}</h3>
 
         <div className="bg-card rounded-2xl p-8 mb-4 aspect-square flex items-center justify-center">
           {selectedFolderItem?.type === 'folder'
@@ -72,16 +74,16 @@ export default function PreviewPanel(props: Props) {
         <div className="space-y-3">
           <Card className="p-3">
             <CardHeader className="p-0 mb-1">
-              <CardTitle className="text-xs font-normal text-gray-500 dark:text-gray-400">{selectedFolderItem?.type === 'filetype' ? '文件类型扩展名' : selectedFolderItem?.type === 'shortcut' ? '快捷方式路径' : selectedFolderItem?.type === 'application' ? '应用程序路径' : '文件夹路径'}</CardTitle>
+              <CardTitle className="text-xs font-normal text-gray-500 dark:text-gray-400">{selectedFolderItem?.type === 'filetype' ? t('文件类型扩展名', 'Filetype Extension') : selectedFolderItem?.type === 'shortcut' ? t('快捷方式路径', 'Shortcut Path') : selectedFolderItem?.type === 'application' ? t('应用程序路径', 'Application Path') : t('文件夹路径', 'Folder Path')}</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="text-sm text-gray-800 dark:text-white font-mono break-all">{selectedFolderItem?.type === 'filetype' ? (selectedFolderItem?.ext || '未选择') : (selectedFolderItem?.path || folder || '未选择')}</div>
+              <div className="text-sm text-gray-800 dark:text-white font-mono break-all">{selectedFolderItem?.type === 'filetype' ? (selectedFolderItem?.ext || t('未选择', 'Not selected')) : (selectedFolderItem?.path || folder || t('未选择', 'Not selected'))}</div>
             </CardContent>
           </Card>
 
           <Card className="p-3">
             <CardHeader className="p-0 mb-1">
-              <CardTitle className="text-xs font-normal text-gray-500 dark:text-gray-400">当前图标</CardTitle>
+              <CardTitle className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('当前图标', 'Current Icon')}</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {selectedFolderItem ? (
@@ -91,12 +93,12 @@ export default function PreviewPanel(props: Props) {
                   ) : (
                     <span className="text-3xl">{typeEmoji[selectedFolderItem.type]}</span>
                   )}
-                  <OverflowTooltip className="text-sm text-gray-800 dark:text-white truncate max-w-[10rem]" content={icon ? (icon.split(/\\|\//).pop() || '') : '未选择图标(.ico)'}>
-                    {icon ? icon.split(/\\|\//).pop() : '未选择图标(.ico)'}
+                  <OverflowTooltip className="text-sm text-gray-800 dark:text-white truncate max-w-[10rem]" content={icon ? (icon.split(/\\|\//).pop() || '') : t('未选择图标(.ico)', 'No icon selected (.ico)')}>
+                    {icon ? icon.split(/\\|\//).pop() : t('未选择图标(.ico)', 'No icon selected (.ico)')}
                   </OverflowTooltip>
                 </div>
               ) : (
-                <div className="text-xs text-gray-600 dark:text-gray-400">未选择</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400">{t('未选择', 'Not selected')}</div>
               )}
             </CardContent>
           </Card>
@@ -115,21 +117,21 @@ export default function PreviewPanel(props: Props) {
               } catch {}
               onApplyIcon()
             }}>
-              应用图标
+              {t('应用图标', 'Apply Icon')}
             </Button>
             <Button variant="outline" onClick={onRestore}>
-              还原
+              {t('还原', 'Restore')}
             </Button>
           </div>
 
           <Button onClick={onSmartMatch} className="w-full">
             <Sparkles className="w-4 h-4" />
-            一键匹配图标
+            {t('一键匹配图标', 'Smart Match')}
           </Button>
         </div>
 
         <div className="mt-6">
-          <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-3">相似推荐</h4>
+          <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-3">{t('相似推荐', 'Similar Recommendations')}</h4>
           <div className="grid grid-cols-4 gap-2">
             {recommendations.map((it) => (
               <Button key={it.path} variant="secondary" className="aspect-square rounded-lg p-2" onClick={() => { onClickRecommendation(it.path) }}>

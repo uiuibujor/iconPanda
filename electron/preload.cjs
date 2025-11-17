@@ -33,4 +33,6 @@ contextBridge.exposeInMainWorld('api', {
   ,windowToggleMaximize: () => ipcRenderer.invoke('window-toggle-maximize')
   ,windowIsMaximized: () => ipcRenderer.invoke('window-is-maximized')
   ,windowClose: () => ipcRenderer.invoke('window-close')
+  ,getAppVersion: () => ipcRenderer.invoke('get-app-version')
+  ,copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text)
 })

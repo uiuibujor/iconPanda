@@ -53,6 +53,8 @@ declare global {
       windowToggleMaximize: () => Promise<boolean>
       windowIsMaximized: () => Promise<boolean>
       windowClose: () => Promise<boolean>
+      getAppVersion?: () => Promise<string>
+      copyToClipboard?: (text: string) => Promise<boolean>
     }
   }
 }
@@ -86,6 +88,29 @@ export default function App() {
   const [sizePickerImages, setSizePickerImages] = useState<Array<{ size: 'small' | 'large' | number; dataUrl: string }>>([])
   const [sizePickerSourcePath, setSizePickerSourcePath] = useState<string>('')
 
+  const [locale, setLocale] = useState<'zh' | 'en'>(() => {
+    try {
+      const saved = localStorage.getItem('locale')
+      return saved === 'en' ? 'en' : 'zh'
+    } catch {
+      return 'zh'
+    }
+  })
+
+  useEffect(() => {
+    try { localStorage.setItem('locale', locale) } catch {}
+  }, [locale])
+
+  const [appVersion, setAppVersion] = useState<string>('')
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const v = await window.api.getAppVersion?.()
+      if (mounted && v) setAppVersion(v)
+    })()
+    return () => { mounted = false }
+  }, [])
+
   useEffect(() => {
     loadLibrary()
   }, [loadLibrary])
@@ -109,20 +134,20 @@ export default function App() {
     const f = await window.api.pickFolder()
     if (!f) return
     setFolder(f)
-    const name = f.replace(/\\+/g, '/').split('/').filter(Boolean).pop() || 'Folder'
+    const name = f.replace(/\\+/g, '/').split('/').filter(Boolean).pop() || (locale === 'zh' ? '文件夹' : 'Folder')
     const item = { type: 'folder' as const, name, path: f, icon: '📁', status: '待处理' as const }
     setFolders((prev) => {
       const exists = prev.some((p) => p.path === f)
       return exists ? prev : [item, ...prev]
     })
     setSelectedFolderItem(item)
-  }, [])
+  }, [locale])
 
   
 
   const apply = useCallback(async () => {
     const ok = await window.api.applyIcon(folder, icon)
-    if (!ok) alert('失败')
+    if (!ok) alert(locale === 'zh' ? '失败' : 'Failed')
     if (ok && selectedFolderItem && selectedFolderItem.type === 'folder') {
       setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '已修改' } : p)))
       setSelectedFolderItem((prev) => (prev ? { ...prev, status: '已修改' } : prev))
@@ -136,7 +161,7 @@ export default function App() {
   const applyShortcut = useCallback(async () => {
     if (!selectedFolderItem || selectedFolderItem.type !== 'shortcut' || !icon) return
     const ok = await window.api.applyShortcutIcon?.(selectedFolderItem.path, icon)
-    if (!ok) alert('失败')
+    if (!ok) alert(locale === 'zh' ? '失败' : 'Failed')
     if (ok) {
       setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '已修改' } : p)))
       setSelectedFolderItem((prev) => (prev ? { ...prev, status: '已修改' } : prev))
@@ -150,7 +175,7 @@ export default function App() {
     if (!selectedFolderItem || selectedFolderItem.type !== 'application' || !icon) return
     const r = await window.api.applyApplicationIcon?.(selectedFolderItem.path, icon)
     const ok = !!(r && r.ok)
-    if (!ok) alert('失败')
+    if (!ok) alert(locale === 'zh' ? '失败' : 'Failed')
     if (ok) {
       const lnk = r!.shortcut
       setCreatedShortcuts((prev) => ({ ...prev, [selectedFolderItem.path]: lnk }))
@@ -169,7 +194,7 @@ export default function App() {
     }
     if (file.type === '' && e.dataTransfer.items?.[0]?.kind === 'file') {
       setFolder(file.path)
-      const name = file.path.replace(/\\+/g, '/').split('/').filter(Boolean).pop() || 'Folder'
+      const name = file.path.replace(/\\+/g, '/').split('/').filter(Boolean).pop() || (locale === 'zh' ? '文件夹' : 'Folder')
       const item = { type: 'folder' as const, name, path: file.path, icon: '📁', status: '待处理' as const }
       setFolders((prev) => {
         const exists = prev.some((p) => p.path === file.path)
@@ -177,7 +202,7 @@ export default function App() {
       })
       setSelectedFolderItem(item)
     }
-  }, [])
+  }, [locale])
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -239,7 +264,7 @@ export default function App() {
   const isApplied = useCallback((p: string) => (selectedFolderItem ? appliedIcons[selectedFolderItem.path] === p : false), [selectedFolderItem, appliedIcons])
   const handleGridApplyOrRestore = useCallback(async (iconPath: string) => {
     if (!selectedFolderItem) return
-    if (selectedFolderItem.type === 'filetype') { alert('功能待开发'); return }
+    if (selectedFolderItem.type === 'filetype') { alert(locale === 'zh' ? '功能待开发' : 'Work in progress'); return }
     const already = appliedIcons[selectedFolderItem.path] === iconPath
     if (already) {
       let ok = false
@@ -295,7 +320,7 @@ export default function App() {
         }
         setAppliedIcons((prev) => ({ ...prev, [selectedFolderItem.path]: iconPath }))
       } else {
-        alert('应用失败')
+        alert(locale === 'zh' ? '应用失败' : 'Apply failed')
       }
     }
   }, [selectedFolderItem, appliedIcons])
@@ -312,7 +337,7 @@ export default function App() {
         setFolderThumbs((prev) => ({ ...prev, [folder]: '' }))
         setAppliedIcons((prev) => { const n = { ...prev }; delete n[folder]; return n })
       } else {
-        alert('还原失败')
+        alert(locale === 'zh' ? '还原失败' : 'Restore failed')
       }
       return
     }
@@ -324,29 +349,29 @@ export default function App() {
         const res = await window.api.getShortcutPreview?.(selectedFolderItem.path)
         setItemThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res && res.ok ? res.iconDataUrl : (prev[selectedFolderItem.path] || '') }))
       } else {
-        alert('还原失败')
+        alert(locale === 'zh' ? '还原失败' : 'Restore failed')
       }
       return
     }
     if (selectedFolderItem.type === 'application') {
       const lnk = createdShortcuts[selectedFolderItem.path]
-      if (!lnk) { alert('未找到已创建的快捷方式'); return }
+      if (!lnk) { alert(locale === 'zh' ? '未找到已创建的快捷方式' : 'Created shortcut not found'); return }
       const ok = await window.api.restoreApplicationShortcut?.(lnk)
       if (ok) {
         setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '待处理' } : p)))
         setAppliedIcons((prev) => { const n = { ...prev }; delete n[selectedFolderItem.path]; return n })
         setCreatedShortcuts((prev) => { const n = { ...prev }; delete n[selectedFolderItem.path]; return n })
       } else {
-        alert('还原失败')
+        alert(locale === 'zh' ? '还原失败' : 'Restore failed')
       }
       return
     }
-    alert('功能待开发')
+    alert(locale === 'zh' ? '功能待开发' : 'Work in progress')
   }, [selectedFolderItem, folder])
   const handleSmartMatch = useCallback(() => {
     if (!selectedFolderItem) return
     const list = recommendationsLib
-    if (!list.length) { alert('图标库为空或无匹配项'); return }
+    if (!list.length) { alert(locale === 'zh' ? '图标库为空或无匹配项' : 'Library is empty or no matches'); return }
     const idx = recommendCycleIndex % list.length
     const chosen = list[idx]
     setRecommendFilterActive(true)
@@ -359,7 +384,7 @@ export default function App() {
   const handleBatchApply = useCallback(async () => {
     if (!icon || !selectedFolderPaths.length) return
     const targets = selectedFolderPaths.filter((p) => { const it = folders.find((f) => f.path === p); return it && it.type !== 'filetype' })
-    if (!targets.length) { alert('请选择文件夹、快捷方式或应用程序'); return }
+    if (!targets.length) { alert(locale === 'zh' ? '请选择文件夹、快捷方式或应用程序' : 'Please select folders, shortcuts, or applications'); return }
     const iname = icon.split(/\\|\//).pop() || ''
     const list: Array<{ folder: string; name: string; iconPath: string; iconName: string; checked: boolean; exact: boolean }> = []
     for (const p of targets) {
@@ -378,7 +403,7 @@ export default function App() {
   const handleBatchMatch = useCallback(async () => {
     if (!selectedFolderPaths.length || !libraryIcons.length) return
     const targets = selectedFolderPaths.filter((p) => { const it = folders.find((f) => f.path === p); return it && it.type !== 'filetype' })
-    if (!targets.length) { alert('请选择文件夹、快捷方式或应用程序'); return }
+    if (!targets.length) { alert(locale === 'zh' ? '请选择文件夹、快捷方式或应用程序' : 'Please select folders, shortcuts, or applications'); return }
     const list: Array<{ folder: string; name: string; iconPath: string; iconName: string; checked: boolean; exact: boolean }> = []
     for (const p of targets) {
       const item = folders.find((f) => f.path === p)
@@ -399,7 +424,7 @@ export default function App() {
   const handleBatchRestore = useCallback(async () => {
     if (!selectedFolderPaths.length) return
     const targets = selectedFolderPaths.filter((p) => { const it = folders.find((f) => f.path === p); return it && it.type !== 'filetype' })
-    if (!targets.length) { alert('请选择文件夹、快捷方式或应用程序'); return }
+    if (!targets.length) { alert(locale === 'zh' ? '请选择文件夹、快捷方式或应用程序' : 'Please select folders, shortcuts, or applications'); return }
     const list: Array<{ folder: string; name: string; iconPath: string; iconName: string; checked: boolean; exact: boolean }> = []
     for (const p of targets) {
       const item = folders.find((f) => f.path === p)
@@ -433,7 +458,14 @@ export default function App() {
         onMinimize={minimize}
         onToggleMaximize={toggleMaximize}
         onClose={close}
-        onSettingsClick={() => { alert('设置：功能待开发') }}
+        locale={locale}
+        onChangeLocale={(l) => setLocale(l)}
+        appVersion={appVersion}
+        onCopyGithub={async () => {
+          const url = 'https://github.com/'
+          const ok = await window.api.copyToClipboard?.(url)
+          return !!ok
+        }}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -471,8 +503,9 @@ export default function App() {
             setSelectedFolderItem(items[0] || null)
             setFolder('')
           }}
-          onAddFiletype={() => { const item = { type: 'filetype' as const, name: 'PDF 文件类型', path: 'filetype:.pdf', ext: '.pdf', icon: '📄', status: '待处理' as const }; setFolders((prev) => (prev.some((p) => p.path === item.path) ? prev : [item, ...prev])); setSelectedFolderItem(item); setFolder(''); alert('添加文件类型：功能待开发') }}
+          onAddFiletype={() => { const item = { type: 'filetype' as const, name: (locale === 'zh' ? 'PDF 文件类型' : 'PDF File Type'), path: 'filetype:.pdf', ext: '.pdf', icon: '📄', status: '待处理' as const }; setFolders((prev) => (prev.some((p) => p.path === item.path) ? prev : [item, ...prev])); setSelectedFolderItem(item); setFolder(''); alert(locale === 'zh' ? '添加文件类型：功能待开发' : 'Add filetype: Work in progress') }}
           isDark={isDark}
+          locale={locale}
         />
 
         <MacScrollbar className="flex-1 p-6" suppressScrollX skin={isDark ? 'dark' : 'light'}>
@@ -488,7 +521,7 @@ export default function App() {
           const items = previews && previews.ok ? previews.items : []
           console.log('[UI] onImportFromExe previews', { ok: previews?.ok, count: items.length, sizes: items.map((i) => i.size) })
           if (!items.length) {
-            alert('无法提取图标预览')
+            alert(locale === 'zh' ? '无法提取图标预览' : 'Cannot extract icon previews')
             return
           }
           setSizePickerSourcePath(p)
@@ -499,6 +532,7 @@ export default function App() {
         onRefresh={async () => { const res = await window.api.resetIconLibraryPath(); if (res.ok) await loadLibrary() }}
         onClearFilter={() => { setRecommendFilterActive(false); setSearchQuery(''); setLibraryPage(1) }}
         canClear={!!(recommendFilterActive || searchQuery)}
+        locale={locale}
       />
 
           <IconLibraryGrid
@@ -517,6 +551,7 @@ export default function App() {
             onPrevPage={() => setLibraryPage((p) => Math.max(1, p - 1))}
             onNextPage={() => setLibraryPage((p) => Math.min(pageCount, p + 1))}
             onLastPage={() => setLibraryPage(pageCount)}
+            locale={locale}
           />
         </MacScrollbar>
 
@@ -536,6 +571,7 @@ export default function App() {
           thumbs={thumbs}
           onClickRecommendation={handleClickRecommendation}
           isDark={isDark}
+          locale={locale}
         />
       </div>
 
@@ -546,6 +582,7 @@ export default function App() {
         onBatchMatch={handleBatchMatch}
         onBatchRestore={handleBatchRestore}
         onBatchDelete={handleBatchDelete}
+        locale={locale}
       />
     </div>
 
@@ -553,16 +590,16 @@ export default function App() {
       <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center no-drag">
         <div className="bg-card border border-border rounded-xl w-[520px] max-w-[90vw] shadow-xl">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <div className="text-sm font-bold">选择要提取的图标尺寸</div>
+            <div className="text-sm font-bold">{locale === 'zh' ? '选择要提取的图标尺寸' : 'Choose icon size to extract'}</div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => { setSizePickerOpen(false); setSizePickerImages([]); setSizePickerSourcePath('') }} className="text-xs">取消</Button>
+              <Button variant="outline" onClick={() => { setSizePickerOpen(false); setSizePickerImages([]); setSizePickerSourcePath('') }} className="text-xs">{locale === 'zh' ? '取消' : 'Cancel'}</Button>
             </div>
           </div>
           <div className="p-4 grid grid-cols-2 gap-4">
             {sizePickerImages.map((it, idx) => (
               <div key={idx} className="border border-border rounded-lg p-3 flex flex-col items-center gap-2">
                 <img src={it.dataUrl} alt={String(it.size)} className="w-16 h-16 object-contain" />
-                <div className="text-xs text-gray-600">{typeof it.size === 'number' ? `${it.size}x${it.size}` : (it.size === 'large' ? '大图标' : '小图标')}</div>
+                <div className="text-xs text-gray-600">{typeof it.size === 'number' ? `${it.size}x${it.size}` : (it.size === 'large' ? (locale === 'zh' ? '大图标' : 'Large icon') : (locale === 'zh' ? '小图标' : 'Small icon'))}</div>
                 <Button className="text-xs" onClick={async () => {
                   console.log('[UI] onPickSize start', { src: sizePickerSourcePath, size: it.size })
                   const r = await window.api.extractIconToLibrary?.(sizePickerSourcePath, 0, it.size)
@@ -575,9 +612,9 @@ export default function App() {
                     setSizePickerSourcePath('')
                   } else {
                     console.error('[UI] onPickSize failed', r)
-                    alert('提取失败')
+                    alert(locale === 'zh' ? '提取失败' : 'Extract failed')
                   }
-                }}>选择该尺寸</Button>
+                }}>{locale === 'zh' ? '选择该尺寸' : 'Select this size'}</Button>
               </div>
             ))}
           </div>
@@ -659,6 +696,7 @@ export default function App() {
         }
         setBatchPreviewOpen(false)
       }}
+      locale={locale}
     />
     </TooltipProvider>
   )

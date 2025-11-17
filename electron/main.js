@@ -1,5 +1,5 @@
 // main.js
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
@@ -19,8 +19,8 @@ function ensureDir(dir) {
 function getIconLibraryPath() {
   let dir = store.get('iconLibraryPath')
   if (typeof dir !== 'string' || !dir) {
-    const projectIcons = path.join(process.cwd(), 'icons')
-    dir = projectIcons
+    const defaultDir = 'd:\\codes\\图标替换助手\\iconlibrary'
+    dir = defaultDir
     store.set('iconLibraryPath', dir)
   }
   ensureDir(dir)
@@ -265,6 +265,14 @@ app.whenReady().then(() => {
     const res = await dialog.showOpenDialog({ filters: [{ name: 'Icons', extensions: ['ico'] }], properties: ['openFile', 'multiSelections'] })
     if (res.canceled || res.filePaths.length === 0) return []
     return res.filePaths
+  })
+
+  ipcMain.handle('get-app-version', async () => {
+    try { return app.getVersion() } catch { return '' }
+  })
+
+  ipcMain.handle('copy-to-clipboard', async (_e, text) => {
+    try { clipboard.writeText(String(text || '')); return true } catch { return false }
   })
 
   ipcMain.handle('pick-pngs', async () => {
@@ -652,7 +660,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('reset-icon-library-path', async () => {
     try {
-      const dir = path.join(process.cwd(), 'icons')
+      const dir = 'd:\\codes\\图标替换助手\\iconlibrary'
       store.set('iconLibraryPath', dir)
       ensureDir(dir)
       return { ok: true, path: dir }

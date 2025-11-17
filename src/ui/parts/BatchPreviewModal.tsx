@@ -18,10 +18,12 @@ type Props = {
   onConfirm: () => void | Promise<void>
   onToggleCheck: (folder: string, checked: boolean) => void
   onToggleCheckAll: (checked: boolean) => void
+  locale?: 'zh' | 'en'
 }
 
 export default function BatchPreviewModal(props: Props) {
-  const { open, mode, candidates, folderThumbs, itemThumbs, thumbs, onCancel, onConfirm, onToggleCheck, onToggleCheckAll } = props
+  const { open, mode, candidates, folderThumbs, itemThumbs, thumbs, onCancel, onConfirm, onToggleCheck, onToggleCheckAll, locale = 'zh' } = props
+  const t = (zh: string, en: string) => (locale === 'zh' ? zh : en)
   if (!open) return null
   const allChecked = candidates.length !== 0 && candidates.every((c) => c.checked)
   const someChecked = candidates.some((c) => c.checked)
@@ -31,15 +33,15 @@ export default function BatchPreviewModal(props: Props) {
         <div className="bg-card border border-border rounded-xl w-[720px] max-w-[90vw] shadow-xl">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="text-sm font-bold">{mode === 'match' ? '批量一键匹配预览' : mode === 'apply' ? '批量应用预览' : '批量还原预览'}</div>
+              <div className="text-sm font-bold">{mode === 'match' ? t('批量一键匹配预览', 'Smart Match Preview (Batch)') : mode === 'apply' ? t('批量应用预览', 'Apply Preview (Batch)') : t('批量还原预览', 'Restore Preview (Batch)')}</div>
               <div className="flex items-center gap-2">
                 <Checkbox checked={triState} onCheckedChange={(checked) => { onToggleCheckAll(!!checked) }} />
-                <span className="text-xs text-gray-600 dark:text-gray-400">全选</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400">{t('全选', 'Select All')}</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={onCancel} className="text-xs">取消</Button>
-              <Button onClick={onConfirm} className="text-xs">确认应用</Button>
+              <Button variant="outline" onClick={onCancel} className="text-xs">{t('取消', 'Cancel')}</Button>
+              <Button onClick={onConfirm} className="text-xs">{t('确认应用', 'Confirm')}</Button>
             </div>
           </div>
           <MacScrollbar className="p-4 max-h-[60vh]" suppressScrollX>
@@ -58,15 +60,15 @@ export default function BatchPreviewModal(props: Props) {
                   </div>
                   <div className="flex flex-col items-end w-32">
                     {mode === 'restore' ? (
-                      <div className="text-[11px] text-gray-600 dark:text-gray-400">将还原</div>
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400">{t('将还原', 'Will restore')}</div>
                     ) : (
                       <OverflowTooltip className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[8rem]" content={c.iconName}>{c.iconName}</OverflowTooltip>
                     )}
-                    {mode === 'match' && c.exact ? (<span className="mt-1 text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">完全匹配</span>) : null}
+                    {mode === 'match' && c.exact ? (<span className="mt-1 text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">{t('完全匹配', 'Exact match')}</span>) : null}
                   </div>
                 </div>
               ))}
-              {candidates.length === 0 ? (<div className="text-xs text-center text-gray-500 py-8 col-span-2">暂无匹配结果</div>) : null}
+              {candidates.length === 0 ? (<div className="text-xs text-center text-gray-500 py-8 col-span-2">{t('暂无匹配结果', 'No match results')}</div>) : null}
             </div>
           </MacScrollbar>
         </div>
