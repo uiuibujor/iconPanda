@@ -39,7 +39,7 @@ function copyIconToFolder(folder: string, sourceIcon: string) {
 }
 
 function refreshIconCache() {
-  const sysRoot = process.env.SystemRoot || 'C\\\Windows'
+  const sysRoot = process.env.SystemRoot || 'C\\Windows'
   const ie4u = path.join(sysRoot, 'System32', 'ie4uinit.exe')
   if (fs.existsSync(ie4u)) {
     execFile(ie4u, ['-ClearIconCache'])
@@ -58,24 +58,5 @@ app.whenReady().then(() => {
   ipcMain.handle('pick-icon', async () => {
     const res = await dialog.showOpenDialog({ filters: [{ name: 'Icons', extensions: ['ico'] }], properties: ['openFile'] })
     if (res.canceled || res.filePaths.length === 0) return ''
-    return res.filePaths[0]
   })
-
-  ipcMain.handle('apply-icon', async (_e, folder: string, icon: string) => {
-    if (!folder || !icon) return false
-    const copied = copyIconToFolder(folder, icon)
-    const rel = path.basename(copied)
-    ensureDesktopIni(folder, rel)
-    setFolderAttributes(folder)
-    refreshIconCache()
-    return true
-  })
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
 })

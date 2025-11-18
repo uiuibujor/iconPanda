@@ -19,7 +19,7 @@ function ensureDir(dir) {
 function getIconLibraryPath() {
   let dir = store.get('iconLibraryPath')
   if (typeof dir !== 'string' || !dir) {
-    const defaultDir = 'd:\\codes\\图标替换助手\\iconlibrary'
+    const defaultDir = path.join(app.getPath('userData'), 'iconlibrary')
     dir = defaultDir
     store.set('iconLibraryPath', dir)
   }
@@ -67,6 +67,9 @@ function importIconToLibrary(srcPath) {
 function createWindow() {
   const __filename = fileURLToPath(import.meta.url)
   const __dirname = path.dirname(__filename)
+  const isDev = !app.isPackaged
+  const prodIcon = path.join(process.resourcesPath || '', 'icons', 'icon.ico')
+  const winIcon = isDev ? path.join(__dirname, '../../build/icons/icon.ico') : prodIcon
   const win = new BrowserWindow({
     width: 1288,
     height: 800,
@@ -75,7 +78,7 @@ function createWindow() {
     frame: false,
     autoHideMenuBar: true,
     show: false,
-    icon: path.join(__dirname, '../build/icons/icon.ico'),
+    icon: winIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -85,11 +88,16 @@ function createWindow() {
   Menu.setApplicationMenu(null)
   try { win.setMenuBarVisibility(false) } catch {}
   const devUrl = 'http://127.0.0.1:3000'
-  win.loadURL(devUrl)
+  if (!app.isPackaged) {
+    win.loadURL(devUrl)
+    win.webContents.openDevTools({ mode: 'detach' })
+  } else {
+    const indexHtml = path.join(app.getAppPath(), 'dist', 'index.html')
+    win.loadFile(indexHtml)
+  }
   win.once('ready-to-show', () => {
     try { win.show() } catch {}
   })
-  win.webContents.openDevTools({ mode: 'detach' })
 }
 
 function ensureDesktopIni(folder, iconPath) {
@@ -678,7 +686,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('reset-icon-library-path', async () => {
     try {
-      const dir = 'd:\\codes\\图标替换助手\\iconlibrary'
+      const dir = path.join(app.getPath('userData'), 'iconlibrary')
       store.set('iconLibraryPath', dir)
       ensureDir(dir)
       return { ok: true, path: dir }

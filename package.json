@@ -1,8 +1,8 @@
 {
-  "name": "icon-helper",
+  "name": "iconpanda",
   "version": "0.1.0",
   "private": true,
-  "main": "electron/main.js",
+  "main": "src/electron/main.js",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://127.0.0.1:3000 && electron .\"",
@@ -12,10 +12,25 @@
   },
   "build": {
     "appId": "com.iconhelper.app",
+
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+  },
     "productName": "IconPanda",
     "directories": {
-      "buildResources": "build"
+      "buildResources": "build",
+      "output": "D:/codes/release"
+      
     },
+    "files": [
+      "dist/**",
+      "src/electron/**",
+      "!src/electron/*.ts",
+      "!src/electron/preload.ts",
+      "!src/electron/preload.js",
+      "node_modules/**"
+    ],
     "win": {
       "icon": "build/icons/icon.ico"
     }
@@ -38,7 +53,9 @@
     "react-dom": "^18.3.1",
     "tailwind-merge": "^3.4.0",
     "win-lnk-parser": "^1.1.2",
-    "windows-shortcuts-ps": "^1.0.1"
+    "windows-shortcuts-ps": "^1.0.1",
+    "dot-prop": "^7.2.0",
+    "env-paths": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.8.6",

@@ -40,7 +40,7 @@ function parseIconLocation(raw) {
     return { path: '', index: 0 };
   }
   
-  // 尝试匹配带引号和索引的格式: "C:\path\file.exe",0
+  // 尝试匹配带引号和索引的格式: "C:\\path\\file.exe",0
   let match = trimmed.match(/^"([^"]+)"\s*,\s*(-?\d+)$/);
   if (match) {
     return { 
@@ -49,7 +49,7 @@ function parseIconLocation(raw) {
     };
   }
   
-  // 尝试匹配不带引号但有索引的格式: C:\path\file.exe,0
+  // 尝试匹配不带引号但有索引的格式: C:\\path\\file.exe,0
   match = trimmed.match(/^([^,]+)\s*,\s*(-?\d+)$/);
   if (match) {
     const parsedPath = match[1].trim();
@@ -301,26 +301,7 @@ export async function extractFileIconDataUrl(filePath, iconIndex) {
     // 修改 PowerShell 脚本：禁止所有非数据输出
     const ps = `$ErrorActionPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.Drawing
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-using System.Drawing;
-public class IconExtractor {
-  [DllImport("Shell32.dll", CharSet=CharSet.Auto)]
-  public static extern uint ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);
-  [DllImport("User32.dll", CharSet=CharSet.Auto)]
-  public static extern uint PrivateExtractIcons(string lpszFile, int nIconIndex, int cxIcon, int cyIcon, IntPtr[] phicon, uint[] piconid, uint nIcons, uint flags);
-  [DllImport("User32.dll", CharSet=CharSet.Auto)]
-  public static extern bool DestroyIcon(IntPtr hIcon);
-  public static IntPtr ExtractSizeHandle(string file, int index, int w, int h) {
-    IntPtr[] arr = new IntPtr[1];
-    uint[] ids = new uint[1];
-    uint got = PrivateExtractIcons(file, index, w, h, arr, ids, 1, 0);
-    if (got == 0) return IntPtr.Zero;
-    return arr[0];
-  }
-}
-"@ -ReferencedAssemblies System.Drawing -WarningAction SilentlyContinue -ErrorAction SilentlyContinue | Out-Null
+Add-Type -TypeDefinition @"\nusing System;\nusing System.Runtime.InteropServices;\nusing System.Drawing;\npublic class IconExtractor {\n  [DllImport("Shell32.dll", CharSet=CharSet.Auto)]\n  public static extern uint ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);\n  [DllImport("User32.dll", CharSet=CharSet.Auto)]\n  public static extern uint PrivateExtractIcons(string lpszFile, int nIconIndex, int cxIcon, int cyIcon, IntPtr[] phicon, uint[] piconid, uint nIcons, uint flags);\n  [DllImport("User32.dll", CharSet=CharSet.Auto)]\n  public static extern bool DestroyIcon(IntPtr hIcon);\n  public static IntPtr ExtractSizeHandle(string file, int index, int w, int h) {\n    IntPtr[] arr = new IntPtr[1];\n    uint[] ids = new uint[1];\n    uint got = PrivateExtractIcons(file, index, w, h, arr, ids, 1, 0);\n    if (got == 0) return IntPtr.Zero;\n    return arr[0];\n  }\n}\n"@ -ReferencedAssemblies System.Drawing -WarningAction SilentlyContinue -ErrorAction SilentlyContinue | Out-Null
 
 $path = $args[0]
 $index = [int]$args[1]
@@ -447,26 +428,7 @@ export async function extractFileIconDataUrls(filePath, iconIndex = 0) {
     scriptPath = path.join(tmpDir, 'extract-icons.ps1');
     const ps = `$ErrorActionPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.Drawing
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-using System.Drawing;
-public class IconExtractor {
-  [DllImport("Shell32.dll", CharSet=CharSet.Auto)]
-  public static extern uint ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);
-  [DllImport("User32.dll", CharSet=CharSet.Auto)]
-  public static extern uint PrivateExtractIcons(string lpszFile, int nIconIndex, int cxIcon, int cyIcon, IntPtr[] phicon, uint[] piconid, uint nIcons, uint flags);
-  [DllImport("User32.dll", CharSet=CharSet.Auto)]
-  public static extern bool DestroyIcon(IntPtr hIcon);
-  public static IntPtr ExtractSizeHandle(string file, int index, int w, int h) {
-    IntPtr[] arr = new IntPtr[1];
-    uint[] ids = new uint[1];
-    uint got = PrivateExtractIcons(file, index, w, h, arr, ids, 1, 0);
-    if (got == 0) return IntPtr.Zero;
-    return arr[0];
-  }
-}
-"@ -ReferencedAssemblies System.Drawing -WarningAction SilentlyContinue -ErrorAction SilentlyContinue | Out-Null
+Add-Type -TypeDefinition @"\nusing System;\nusing System.Runtime.InteropServices;\nusing System.Drawing;\npublic class IconExtractor {\n  [DllImport("Shell32.dll", CharSet=CharSet.Auto)]\n  public static extern uint ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);\n  [DllImport("User32.dll", CharSet=CharSet.Auto)]\n  public static extern uint PrivateExtractIcons(string lpszFile, int nIconIndex, int cxIcon, int cyIcon, IntPtr[] phicon, uint[] piconid, uint nIcons, uint flags);\n  [DllImport("User32.dll", CharSet=CharSet.Auto)]\n  public static extern bool DestroyIcon(IntPtr hIcon);\n  public static IntPtr ExtractSizeHandle(string file, int index, int w, int h) {\n    IntPtr[] arr = new IntPtr[1];\n    uint[] ids = new uint[1];\n    uint got = PrivateExtractIcons(file, index, w, h, arr, ids, 1, 0);\n    if (got == 0) return IntPtr.Zero;\n    return arr[0];\n  }\n}\n"@ -ReferencedAssemblies System.Drawing -WarningAction SilentlyContinue -ErrorAction SilentlyContinue | Out-Null
 
 function GetSizeBase64($path, $index, $w, $h) {
   $result = ''
@@ -561,32 +523,7 @@ export async function extractFileIconToIco(filePath, iconIndex, destPath, size) 
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-helper-'));
     scriptPath = path.join(tmpDir, 'save-ico.ps1');
     const ps = `Add-Type -AssemblyName System.Drawing
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-using System.Drawing;
-public class IconExtractor {
-  [DllImport("Shell32.dll", CharSet=CharSet.Auto)]
-  public static extern uint ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);
-  [DllImport("User32.dll", CharSet=CharSet.Auto)]
-  public static extern uint PrivateExtractIcons(string lpszFile, int nIconIndex, int cxIcon, int cyIcon, IntPtr[] phicon, uint[] piconid, uint nIcons, uint flags);
-  [DllImport("User32.dll", CharSet=CharSet.Auto)]
-  public static extern bool DestroyIcon(IntPtr hIcon);
-  public static IntPtr ExtractSizeHandle(string file, int index, int w, int h) {
-    IntPtr[] arr = new IntPtr[1];
-    uint[] ids = new uint[1];
-    uint got = PrivateExtractIcons(file, index, w, h, arr, ids, 1, 0);
-    if (got == 0) return IntPtr.Zero;
-    return arr[0];
-  }
-  public static IntPtr ExtractIndexHandle(string file, int index, bool large) {
-    IntPtr[] largeIcons = new IntPtr[1];
-    IntPtr[] smallIcons = new IntPtr[1];
-    ExtractIconEx(file, index, large ? largeIcons : null, large ? null : smallIcons, 1);
-    return large ? largeIcons[0] : smallIcons[0];
-  }
-}
-"@ -ReferencedAssemblies System.Drawing
+Add-Type -TypeDefinition @"\nusing System;\nusing System.Runtime.InteropServices;\nusing System.Drawing;\npublic class IconExtractor {\n  [DllImport("Shell32.dll", CharSet=CharSet.Auto)]\n  public static extern uint ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);\n  [DllImport("User32.dll", CharSet=CharSet.Auto)]\n  public static extern uint PrivateExtractIcons(string lpszFile, int nIconIndex, int cxIcon, int cyIcon, IntPtr[] phicon, uint[] piconid, uint nIcons, uint flags);\n  [DllImport("User32.dll", CharSet=CharSet.Auto)]\n  public static extern bool DestroyIcon(IntPtr hIcon);\n  public static IntPtr ExtractSizeHandle(string file, int index, int w, int h) {\n    IntPtr[] arr = new IntPtr[1];\n    uint[] ids = new uint[1];\n    uint got = PrivateExtractIcons(file, index, w, h, arr, ids, 1, 0);\n    if (got == 0) return IntPtr.Zero;\n    return arr[0];\n  }\n  public static IntPtr ExtractIndexHandle(string file, int index, bool large) {\n    IntPtr[] largeIcons = new IntPtr[1];\n    IntPtr[] smallIcons = new IntPtr[1];\n    ExtractIconEx(file, index, large ? largeIcons : null, large ? null : smallIcons, 1);\n    return large ? largeIcons[0] : smallIcons[0];\n  }\n}\n"@ -ReferencedAssemblies System.Drawing
 $path = $args[0]
 $index = [int]$args[1]
 $dest = $args[2]
