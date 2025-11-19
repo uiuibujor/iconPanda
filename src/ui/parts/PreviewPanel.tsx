@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Sparkles } from 'lucide-react'
 import { OverflowTooltip } from '@/components/ui/tooltip'
+import { Spinner } from '@/components/ui/spinner'
 import confetti from 'canvas-confetti'
 
 type Item = { type: 'folder' | 'shortcut' | 'application'; name: string; path: string; ext?: string }
@@ -28,10 +29,12 @@ type Props = {
   onClickRecommendation: (path: string) => void
   isDark: boolean
   locale?: 'zh' | 'en'
+  applyProcessing?: boolean
+  restoreProcessing?: boolean
 }
 
 export default function PreviewPanel(props: Props) {
-  const { selectedFolderItem, folderPreview, shortcutPreview, applicationPreview, typeEmoji, iconPreview, icon, folder, onApplyIcon, onRestore, onSmartMatch, recommendations, thumbs, onClickRecommendation, isDark, locale = 'zh' } = props
+  const { selectedFolderItem, folderPreview, shortcutPreview, applicationPreview, typeEmoji, iconPreview, icon, folder, onApplyIcon, onRestore, onSmartMatch, recommendations, thumbs, onClickRecommendation, isDark, locale = 'zh', applyProcessing = false, restoreProcessing = false } = props
   const t = (zh: string, en: string) => (locale === 'zh' ? zh : en)
   const applyBtnRef = useRef<HTMLButtonElement | null>(null)
   return (
@@ -104,7 +107,7 @@ export default function PreviewPanel(props: Props) {
           </Card>
 
           <div className="grid grid-cols-2 gap-2">
-            <Button ref={applyBtnRef} disabled={!icon || !selectedFolderItem || (selectedFolderItem.type === 'folder' ? !folder : false)} onClick={() => {
+            <Button ref={applyBtnRef} disabled={!icon || !selectedFolderItem || (selectedFolderItem.type === 'folder' ? !folder : false) || applyProcessing || restoreProcessing} onClick={() => {
               try {
                 const rect = applyBtnRef.current?.getBoundingClientRect()
                 if (rect) {
@@ -117,10 +120,24 @@ export default function PreviewPanel(props: Props) {
               } catch {}
               onApplyIcon()
             }}>
-              {t('应用图标', 'Apply Icon')}
+              {applyProcessing ? (
+                <span className="flex items-center gap-2">
+                  <Spinner size="sm" />
+                  {t('应用中...', 'Applying...')}
+                </span>
+              ) : (
+                t('应用图标', 'Apply Icon')
+              )}
             </Button>
-            <Button variant="outline" onClick={onRestore}>
-              {t('还原', 'Restore')}
+            <Button variant="outline" onClick={onRestore} disabled={applyProcessing || restoreProcessing}>
+              {restoreProcessing ? (
+                <span className="flex items-center gap-2">
+                  <Spinner size="sm" />
+                  {t('还原中...', 'Restoring...')}
+                </span>
+              ) : (
+                t('还原', 'Restore')
+              )}
             </Button>
           </div>
 

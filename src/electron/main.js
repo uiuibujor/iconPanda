@@ -136,7 +136,7 @@ function restoreFolderIcon(folder) {
     try { if (fs.existsSync(iniPath)) fs.unlinkSync(iniPath) } catch {}
     try { if (fs.existsSync(icoPath)) fs.unlinkSync(icoPath) } catch {}
     try { execFileSync('attrib', ['-s', '-r', folder]) } catch {}
-    refreshIconCache()
+    refreshIconCache(folder)
     return true
   } catch {
     return false
@@ -216,11 +216,63 @@ function deleteShortcutFile(lnkPath) {
   }
 }
 
-function refreshIconCache() {
-  const sysRoot = process.env.SystemRoot || 'C:\\\\Windows'
+function refreshIconCache(folderPath = null) {
+  // 方法1: 使用 SHChangeNotify 通知 Explorer 刷新特定文件夹或整个系统
+  try {
+    let tmpDir = null
+    let scriptPath = null
+    try {
+      const escapedPath = folderPath ? folderPath.replace(/\\/g, '\\\\').replace(/"/g, '`"') : ''
+      const psScript = folderPath
+        ? `
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Shell32 {
+    [DllImport("shell32.dll")]
+    public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
+}
+"@
+$path = "${escapedPath}"
+$ptr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($path)
+try {
+    [Shell32]::SHChangeNotify(0x00002000, 0x0005, $ptr, [IntPtr]::Zero)
+    [Shell32]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
+} finally {
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptr)
+}
+`
+        : `
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Shell32 {
+    [DllImport("shell32.dll")]
+    public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
+}
+"@
+[Shell32]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
+`
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-refresh-'))
+      scriptPath = path.join(tmpDir, 'refresh.ps1')
+      fs.writeFileSync(scriptPath, psScript, { encoding: 'utf8' })
+      execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], {
+        windowsHide: true,
+        timeout: 5000
+      })
+    } finally {
+      try { if (scriptPath) fs.unlinkSync(scriptPath) } catch {}
+      try { if (tmpDir) fs.rmdirSync(tmpDir) } catch {}
+    }
+  } catch (err) {
+    // 如果 PowerShell 方法失败，回退到 ie4uinit
+  }
+
+  // 方法2: 使用 ie4uinit 清除图标缓存（作为备用）
+  const sysRoot = process.env.SystemRoot || 'C:\\Windows'
   const ie4u = path.join(sysRoot, 'System32', 'ie4uinit.exe')
   if (fs.existsSync(ie4u)) {
-    try { execFileSync(ie4u, ['-ClearIconCache']) } catch {}
+    try { execFileSync(ie4u, ['-ClearIconCache'], { windowsHide: true, timeout: 5000 }) } catch {}
   }
 }
 
@@ -317,6 +369,32 @@ app.whenReady().then(() => {
     return res.filePaths
   })
 
+  ipcMain.handle('identify-file-types', async (_e, filePaths) => {
+    if (!Array.isArray(filePaths)) return []
+    const results = []
+    for (const filePath of filePaths) {
+      try {
+        if (!fs.existsSync(filePath)) continue
+        const stats = fs.statSync(filePath)
+        if (stats.isDirectory()) {
+          results.push({ path: filePath, type: 'folder' })
+        } else if (stats.isFile()) {
+          const ext = path.extname(filePath).toLowerCase()
+          if (ext === '.lnk') {
+            results.push({ path: filePath, type: 'shortcut' })
+          } else if (ext === '.exe' || ext === '.dll') {
+            results.push({ path: filePath, type: 'application' })
+          } else if (ext === '.ico') {
+            results.push({ path: filePath, type: 'icon' })
+          }
+        }
+      } catch (err) {
+        // 忽略无法访问的文件
+      }
+    }
+    return results
+  })
+
   ipcMain.handle('apply-icon', async (_e, folder, icon) => {
     if (!folder || !icon) return false
     const copied = copyIconToFolder(folder, icon)
@@ -324,7 +402,7 @@ app.whenReady().then(() => {
     const okIni = ensureDesktopIni(folder, rel)
     if (!okIni) return false
     setFolderAttributes(folder)
-    refreshIconCache()
+    refreshIconCache(folder)
     return true
   })
 

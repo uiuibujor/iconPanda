@@ -36,4 +36,5 @@ contextBridge.exposeInMainWorld('api', {
   ,windowClose: () => ipcRenderer.invoke('window-close')
   ,getAppVersion: () => ipcRenderer.invoke('get-app-version')
   ,copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text)
+  ,identifyFileTypes: (filePaths) => ipcRenderer.invoke('identify-file-types', filePaths)
 })

@@ -56,6 +56,7 @@ declare global {
       windowClose: () => Promise<boolean>
       getAppVersion?: () => Promise<string>
       copyToClipboard?: (text: string) => Promise<boolean>
+      identifyFileTypes?: (filePaths: string[]) => Promise<Array<{ path: string; type: 'folder' | 'shortcut' | 'application' | 'icon' }>>
     }
   }
 }
@@ -84,6 +85,9 @@ export default function App() {
   const [libraryPath, setLibraryPath] = useState('')
   const [batchPreviewMode, setBatchPreviewMode] = useState<'match' | 'apply' | 'restore'>('match')
   const [typeFilter, setTypeFilter] = useState<'all' | 'folder' | 'shortcut' | 'application'>('all')
+  const [batchProcessing, setBatchProcessing] = useState(false)
+  const [applyProcessing, setApplyProcessing] = useState(false)
+  const [restoreProcessing, setRestoreProcessing] = useState(false)
 
   const { iconPreview, folderPreview, folderThumbs, itemThumbs, setFolderPreview, setFolderThumbs, setItemThumbs } = usePreviews(icon, folder, folders)
   const [sizePickerOpen, setSizePickerOpen] = useState(false)
@@ -158,61 +162,112 @@ export default function App() {
 
 
   const apply = useCallback(async () => {
-    const ok = await window.api.applyIcon(folder, icon)
-    if (!ok) alert(locale === 'zh' ? '失败' : 'Failed')
-    if (ok && selectedFolderItem && selectedFolderItem.type === 'folder') {
-      setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '已修改' } : p)))
-      setSelectedFolderItem((prev) => (prev ? { ...prev, status: '已修改' } : prev))
-      const res = await window.api.getFolderPreview(selectedFolderItem.path)
-      setFolderPreview(res.ok ? res : null)
-      setFolderThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res.ok ? res.iconDataUrl : '' }))
-      setAppliedIcons((prev) => ({ ...prev, [selectedFolderItem.path]: icon }))
+    setApplyProcessing(true)
+    try {
+      const ok = await window.api.applyIcon(folder, icon)
+      if (!ok) alert(locale === 'zh' ? '失败' : 'Failed')
+      if (ok && selectedFolderItem && selectedFolderItem.type === 'folder') {
+        setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '已修改' } : p)))
+        setSelectedFolderItem((prev) => (prev ? { ...prev, status: '已修改' } : prev))
+        const res = await window.api.getFolderPreview(selectedFolderItem.path)
+        setFolderPreview(res.ok ? res : null)
+        setFolderThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res.ok ? res.iconDataUrl : '' }))
+        setAppliedIcons((prev) => ({ ...prev, [selectedFolderItem.path]: icon }))
+      }
+    } finally {
+      setApplyProcessing(false)
     }
   }, [folder, icon, selectedFolderItem])
 
   const applyShortcut = useCallback(async () => {
     if (!selectedFolderItem || selectedFolderItem.type !== 'shortcut' || !icon) return
-    const ok = await window.api.applyShortcutIcon?.(selectedFolderItem.path, icon)
-    if (!ok) alert(locale === 'zh' ? '失败' : 'Failed')
-    if (ok) {
-      setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '已修改' } : p)))
-      setSelectedFolderItem((prev) => (prev ? { ...prev, status: '已修改' } : prev))
-      setAppliedIcons((prev) => ({ ...prev, [selectedFolderItem.path]: icon }))
-      const res = await window.api.getShortcutPreview?.(selectedFolderItem.path)
-      setItemThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res && res.ok ? res.iconDataUrl : (prev[selectedFolderItem.path] || '') }))
+    setApplyProcessing(true)
+    try {
+      const ok = await window.api.applyShortcutIcon?.(selectedFolderItem.path, icon)
+      if (!ok) alert(locale === 'zh' ? '失败' : 'Failed')
+      if (ok) {
+        setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '已修改' } : p)))
+        setSelectedFolderItem((prev) => (prev ? { ...prev, status: '已修改' } : prev))
+        setAppliedIcons((prev) => ({ ...prev, [selectedFolderItem.path]: icon }))
+        const res = await window.api.getShortcutPreview?.(selectedFolderItem.path)
+        setItemThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res && res.ok ? res.iconDataUrl : (prev[selectedFolderItem.path] || '') }))
+      }
+    } finally {
+      setApplyProcessing(false)
     }
   }, [selectedFolderItem, icon])
 
   const applyApplication = useCallback(async () => {
     if (!selectedFolderItem || selectedFolderItem.type !== 'application' || !icon) return
-    const r = await window.api.applyApplicationIcon?.(selectedFolderItem.path, icon)
-    const ok = !!(r && r.ok)
-    if (!ok) alert(locale === 'zh' ? '失败' : 'Failed')
-    if (ok) {
-      const lnk = r!.shortcut
-      setCreatedShortcuts((prev) => ({ ...prev, [selectedFolderItem.path]: lnk }))
-      setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '已修改' } : p)))
-      setSelectedFolderItem((prev) => (prev ? { ...prev, status: '已修改' } : prev))
-      setAppliedIcons((prev) => ({ ...prev, [selectedFolderItem.path]: icon }))
+    setApplyProcessing(true)
+    try {
+      const r = await window.api.applyApplicationIcon?.(selectedFolderItem.path, icon)
+      const ok = !!(r && r.ok)
+      if (!ok) alert(locale === 'zh' ? '失败' : 'Failed')
+      if (ok) {
+        const lnk = r!.shortcut
+        setCreatedShortcuts((prev) => ({ ...prev, [selectedFolderItem.path]: lnk }))
+        setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '已修改' } : p)))
+        setSelectedFolderItem((prev) => (prev ? { ...prev, status: '已修改' } : prev))
+        setAppliedIcons((prev) => ({ ...prev, [selectedFolderItem.path]: icon }))
+      }
+    } finally {
+      setApplyProcessing(false)
     }
   }, [selectedFolderItem, icon])
 
-  const onDrop = useCallback((e: React.DragEvent) => {
+  const onDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
-    const file = e.dataTransfer.files?.[0]
-    if (!file) return
-    if (file.type === 'image/x-icon' || file.name.toLowerCase().endsWith('.ico')) {
-      setIcon(file.path)
+    const files = Array.from(e.dataTransfer.files || [])
+    if (!files.length) return
+
+    // 收集所有文件路径
+    const filePaths = files.map(f => f.path).filter(Boolean)
+    if (!filePaths.length) return
+
+    // 调用主进程识别文件类型
+    const identified = await window.api.identifyFileTypes?.(filePaths)
+    if (!identified || !identified.length) return
+
+    const newItems: Array<{ type: 'folder' | 'shortcut' | 'application'; name: string; path: string; icon: string; status: '待处理' }> = []
+    let firstIconPath = ''
+
+    for (const item of identified) {
+      const name = item.path.replace(/\\+/g, '/').split('/').filter(Boolean).pop() || ''
+
+      if (item.type === 'folder') {
+        newItems.push({ type: 'folder', name, path: item.path, icon: '📁', status: '待处理' })
+      } else if (item.type === 'shortcut') {
+        newItems.push({ type: 'shortcut', name, path: item.path, icon: '🔗', status: '待处理' })
+      } else if (item.type === 'application') {
+        newItems.push({ type: 'application', name, path: item.path, icon: '💻', status: '待处理' })
+      } else if (item.type === 'icon' && !firstIconPath) {
+        firstIconPath = item.path
+      }
     }
-    if (file.type === '' && e.dataTransfer.items?.[0]?.kind === 'file') {
-      setFolder(file.path)
-      const name = file.path.replace(/\\+/g, '/').split('/').filter(Boolean).pop() || (locale === 'zh' ? '文件夹' : 'Folder')
-      const item = { type: 'folder' as const, name, path: file.path, icon: '📁', status: '待处理' as const }
+
+    // 如果拖入了图标文件，设置为当前选中的图标
+    if (firstIconPath) {
+      setIcon(firstIconPath)
+    }
+
+    // 添加新项目到列表
+    if (newItems.length > 0) {
       setFolders((prev) => {
-        const exists = prev.some((p) => p.path === file.path)
-        return exists ? prev : [item, ...prev]
+        const existingPaths = new Set(prev.map(p => p.path))
+        const merged = newItems.filter(it => !existingPaths.has(it.path))
+        return merged.length ? [...merged, ...prev] : prev
       })
-      setSelectedFolderItem(item)
+
+      // 选中第一个新添加的项目
+      if (newItems[0]) {
+        setSelectedFolderItem(newItems[0])
+        if (newItems[0].type === 'folder') {
+          setFolder(newItems[0].path)
+        } else {
+          setFolder('')
+        }
+      }
     }
   }, [locale])
 
@@ -335,46 +390,51 @@ export default function App() {
   const handleApplyIcon = useCallback(() => { if (selectedFolderItem?.type === 'shortcut') applyShortcut(); else if (selectedFolderItem?.type === 'application') applyApplication(); else apply() }, [selectedFolderItem, applyShortcut, applyApplication, apply])
   const handleRestore = useCallback(async () => {
     if (!selectedFolderItem) return
-    if (selectedFolderItem.type === 'folder') {
-      if (!folder) return
-      const ok = await window.api.restoreIcon(folder)
-      if (ok) {
-        setFolders((prev) => prev.map((p) => (p.path === folder ? { ...p, status: '待处理' } : p)))
-        const res = await window.api.getFolderPreview(folder)
-        setFolderPreview(res.ok ? res : null)
-        setFolderThumbs((prev) => ({ ...prev, [folder]: '' }))
-        setAppliedIcons((prev) => { const n = { ...prev }; delete n[folder]; return n })
-      } else {
-        alert(locale === 'zh' ? '还原失败' : 'Restore failed')
+    setRestoreProcessing(true)
+    try {
+      if (selectedFolderItem.type === 'folder') {
+        if (!folder) return
+        const ok = await window.api.restoreIcon(folder)
+        if (ok) {
+          setFolders((prev) => prev.map((p) => (p.path === folder ? { ...p, status: '待处理' } : p)))
+          const res = await window.api.getFolderPreview(folder)
+          setFolderPreview(res.ok ? res : null)
+          setFolderThumbs((prev) => ({ ...prev, [folder]: '' }))
+          setAppliedIcons((prev) => { const n = { ...prev }; delete n[folder]; return n })
+        } else {
+          alert(locale === 'zh' ? '还原失败' : 'Restore failed')
+        }
+        return
       }
-      return
-    }
-    if (selectedFolderItem.type === 'shortcut') {
-      const ok = await window.api.restoreShortcutIcon?.(selectedFolderItem.path)
-      if (ok) {
-        setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '待处理' } : p)))
-        setAppliedIcons((prev) => { const n = { ...prev }; delete n[selectedFolderItem.path]; return n })
-        const res = await window.api.getShortcutPreview?.(selectedFolderItem.path)
-        setItemThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res && res.ok ? res.iconDataUrl : (prev[selectedFolderItem.path] || '') }))
-      } else {
-        alert(locale === 'zh' ? '还原失败' : 'Restore failed')
+      if (selectedFolderItem.type === 'shortcut') {
+        const ok = await window.api.restoreShortcutIcon?.(selectedFolderItem.path)
+        if (ok) {
+          setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '待处理' } : p)))
+          setAppliedIcons((prev) => { const n = { ...prev }; delete n[selectedFolderItem.path]; return n })
+          const res = await window.api.getShortcutPreview?.(selectedFolderItem.path)
+          setItemThumbs((prev) => ({ ...prev, [selectedFolderItem.path]: res && res.ok ? res.iconDataUrl : (prev[selectedFolderItem.path] || '') }))
+        } else {
+          alert(locale === 'zh' ? '还原失败' : 'Restore failed')
+        }
+        return
       }
-      return
-    }
-    if (selectedFolderItem.type === 'application') {
-      const lnk = createdShortcuts[selectedFolderItem.path]
-      if (!lnk) { alert(locale === 'zh' ? '未找到已创建的快捷方式' : 'Created shortcut not found'); return }
-      const ok = await window.api.restoreApplicationShortcut?.(lnk)
-      if (ok) {
-        setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '待处理' } : p)))
-        setAppliedIcons((prev) => { const n = { ...prev }; delete n[selectedFolderItem.path]; return n })
-        setCreatedShortcuts((prev) => { const n = { ...prev }; delete n[selectedFolderItem.path]; return n })
-      } else {
-        alert(locale === 'zh' ? '还原失败' : 'Restore failed')
+      if (selectedFolderItem.type === 'application') {
+        const lnk = createdShortcuts[selectedFolderItem.path]
+        if (!lnk) { alert(locale === 'zh' ? '未找到已创建的快捷方式' : 'Created shortcut not found'); return }
+        const ok = await window.api.restoreApplicationShortcut?.(lnk)
+        if (ok) {
+          setFolders((prev) => prev.map((p) => (p.path === selectedFolderItem.path ? { ...p, status: '待处理' } : p)))
+          setAppliedIcons((prev) => { const n = { ...prev }; delete n[selectedFolderItem.path]; return n })
+          setCreatedShortcuts((prev) => { const n = { ...prev }; delete n[selectedFolderItem.path]; return n })
+        } else {
+          alert(locale === 'zh' ? '还原失败' : 'Restore failed')
+        }
+        return
       }
-      return
+      alert(locale === 'zh' ? '功能待开发' : 'Work in progress')
+    } finally {
+      setRestoreProcessing(false)
     }
-    alert(locale === 'zh' ? '功能待开发' : 'Work in progress')
   }, [selectedFolderItem, folder])
   const handleSmartMatch = useCallback(() => {
     if (!selectedFolderItem) return
@@ -584,6 +644,8 @@ export default function App() {
           onClickRecommendation={handleClickRecommendation}
           isDark={isDark}
           locale={locale}
+          applyProcessing={applyProcessing}
+          restoreProcessing={restoreProcessing}
         />
       </div>
 
@@ -640,73 +702,79 @@ export default function App() {
       folderThumbs={folderThumbs}
       itemThumbs={itemThumbs}
       thumbs={thumbs}
+      processing={batchProcessing}
       onCancel={() => { setBatchPreviewOpen(false) }}
       onToggleCheck={(folder, checked) => { setBatchCandidates((prev) => prev.map((it) => (it.folder === folder ? { ...it, checked: !!checked } : it))) }}
       onToggleCheckAll={(checked) => { if (!batchCandidates.length) return; setBatchCandidates((prev) => prev.map((it) => ({ ...it, checked: !!checked }))) }}
       onConfirm={async () => {
         const targets = batchCandidates.filter((c) => c.checked)
         if (!targets.length) { setBatchPreviewOpen(false); return }
-        if (batchPreviewMode === 'restore') {
-          const success: string[] = []
+        setBatchProcessing(true)
+        try {
+          if (batchPreviewMode === 'restore') {
+            const success: string[] = []
+            for (const c of targets) {
+              const item = folders.find((f) => f.path === c.folder)
+              let ok = false
+              if (item?.type === 'folder') {
+                ok = await window.api.restoreIcon(c.folder)
+                if (ok) {
+                  const res = await window.api.getFolderPreview(c.folder)
+                  setFolderThumbs((prev) => ({ ...prev, [c.folder]: '' }))
+                }
+              } else if (item?.type === 'shortcut') {
+                ok = !!(await window.api.restoreShortcutIcon?.(c.folder))
+                if (ok) {
+                  const res = await window.api.getShortcutPreview?.(c.folder)
+                  setItemThumbs((prev) => ({ ...prev, [c.folder]: res && res.ok ? res.iconDataUrl : (prev[c.folder] || '') }))
+                }
+              } else if (item?.type === 'application') {
+                const lnk = createdShortcuts[c.folder]
+                if (lnk) ok = !!(await window.api.restoreApplicationShortcut?.(lnk))
+                if (ok) {
+                  setCreatedShortcuts((prev) => { const n = { ...prev }; delete n[c.folder]; return n })
+                }
+              }
+              if (ok) success.push(c.folder)
+            }
+            if (success.length) {
+              setFolders((prev) => prev.map((f) => (success.includes(f.path) ? { ...f, status: '待处理' } : f)))
+              setAppliedIcons((prev) => { const n = { ...prev }; success.forEach((p) => { delete n[p] }); return n })
+              if (success.includes(folder)) { const res = await window.api.getFolderPreview(folder); setFolderPreview(res.ok ? res : null) }
+            }
+            setBatchPreviewOpen(false)
+            return
+          }
+          const results: { p: string; ok: boolean; thumb?: string; applied?: string }[] = []
           for (const c of targets) {
             const item = folders.find((f) => f.path === c.folder)
             let ok = false
+            let thumb = ''
             if (item?.type === 'folder') {
-              ok = await window.api.restoreIcon(c.folder)
-              if (ok) {
-                const res = await window.api.getFolderPreview(c.folder)
-                setFolderThumbs((prev) => ({ ...prev, [c.folder]: '' }))
-              }
+              ok = await window.api.applyIcon(c.folder, c.iconPath)
+              if (ok) { const res = await window.api.getFolderPreview(c.folder); thumb = res.ok ? res.iconDataUrl : '' }
             } else if (item?.type === 'shortcut') {
-              ok = !!(await window.api.restoreShortcutIcon?.(c.folder))
-              if (ok) {
-                const res = await window.api.getShortcutPreview?.(c.folder)
-                setItemThumbs((prev) => ({ ...prev, [c.folder]: res && res.ok ? res.iconDataUrl : (prev[c.folder] || '') }))
-              }
+              ok = !!(await window.api.applyShortcutIcon?.(c.folder, c.iconPath))
+              if (ok) { const res = await window.api.getShortcutPreview?.(c.folder); thumb = res && res.ok ? res.iconDataUrl : '' }
             } else if (item?.type === 'application') {
-              const lnk = createdShortcuts[c.folder]
-              if (lnk) ok = !!(await window.api.restoreApplicationShortcut?.(lnk))
-              if (ok) {
-                setCreatedShortcuts((prev) => { const n = { ...prev }; delete n[c.folder]; return n })
-              }
+              const r = await window.api.applyApplicationIcon?.(c.folder, c.iconPath)
+              ok = !!(r && r.ok)
+              if (ok && r) setCreatedShortcuts((prev) => ({ ...prev, [c.folder]: r.shortcut }))
             }
-            if (ok) success.push(c.folder)
+            results.push({ p: c.folder, ok, thumb, applied: c.iconPath })
           }
+          const success = results.filter((r) => r.ok)
           if (success.length) {
-            setFolders((prev) => prev.map((f) => (success.includes(f.path) ? { ...f, status: '待处理' } : f)))
-            setAppliedIcons((prev) => { const n = { ...prev }; success.forEach((p) => { delete n[p] }); return n })
-            if (success.includes(folder)) { const res = await window.api.getFolderPreview(folder); setFolderPreview(res.ok ? res : null) }
+            const successPaths = success.map((r) => r.p)
+            setFolders((prev) => prev.map((f) => (successPaths.includes(f.path) ? { ...f, status: '已修改' } : f)))
+            setFolderThumbs((prev) => { const n = { ...prev }; success.forEach((r) => { if (r.thumb) n[r.p] = r.thumb }); return n })
+            setItemThumbs((prev) => { const n = { ...prev }; success.forEach((r) => { if (r.thumb) n[r.p] = r.thumb }); return n })
+            setAppliedIcons((prev) => { const n = { ...prev }; success.forEach((r) => { if (r.applied) n[r.p] = r.applied }); return n })
           }
           setBatchPreviewOpen(false)
-          return
+        } finally {
+          setBatchProcessing(false)
         }
-        const results: { p: string; ok: boolean; thumb?: string; applied?: string }[] = []
-        for (const c of targets) {
-          const item = folders.find((f) => f.path === c.folder)
-          let ok = false
-          let thumb = ''
-          if (item?.type === 'folder') {
-            ok = await window.api.applyIcon(c.folder, c.iconPath)
-            if (ok) { const res = await window.api.getFolderPreview(c.folder); thumb = res.ok ? res.iconDataUrl : '' }
-          } else if (item?.type === 'shortcut') {
-            ok = !!(await window.api.applyShortcutIcon?.(c.folder, c.iconPath))
-            if (ok) { const res = await window.api.getShortcutPreview?.(c.folder); thumb = res && res.ok ? res.iconDataUrl : '' }
-          } else if (item?.type === 'application') {
-            const r = await window.api.applyApplicationIcon?.(c.folder, c.iconPath)
-            ok = !!(r && r.ok)
-            if (ok && r) setCreatedShortcuts((prev) => ({ ...prev, [c.folder]: r.shortcut }))
-          }
-          results.push({ p: c.folder, ok, thumb, applied: c.iconPath })
-        }
-        const success = results.filter((r) => r.ok)
-        if (success.length) {
-          const successPaths = success.map((r) => r.p)
-          setFolders((prev) => prev.map((f) => (successPaths.includes(f.path) ? { ...f, status: '已修改' } : f)))
-          setFolderThumbs((prev) => { const n = { ...prev }; success.forEach((r) => { if (r.thumb) n[r.p] = r.thumb }); return n })
-          setItemThumbs((prev) => { const n = { ...prev }; success.forEach((r) => { if (r.thumb) n[r.p] = r.thumb }); return n })
-          setAppliedIcons((prev) => { const n = { ...prev }; success.forEach((r) => { if (r.applied) n[r.p] = r.applied }); return n })
-        }
-        setBatchPreviewOpen(false)
       }}
       locale={locale}
     />
