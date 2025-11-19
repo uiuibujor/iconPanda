@@ -30,7 +30,7 @@ export default function IconLibraryGrid(props: Props) {
   const t = (zh: string, en: string) => (locale === 'zh' ? zh : en)
   return (
     <>
-      <div className={'flex flex-wrap gap-4 min-h-[160px]'}>
+      <div className={'flex flex-wrap gap-4 min-h-[160px] mt-4'}>
         {libraryLoading ? (
           Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="bg-card rounded-xl p-4 border border-border w-[120px]">

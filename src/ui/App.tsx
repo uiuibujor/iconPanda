@@ -63,7 +63,7 @@ declare global {
 export default function App() {
   const [folder, setFolder] = useState('')
   const [icon, setIcon] = useState('')
-  
+
 
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedFolderItem, setSelectedFolderItem] = useState<{ type: 'folder' | 'shortcut' | 'application'; name: string; path: string; ext?: string; icon: string; status: '已修改' | '待处理' } | null>(null)
@@ -81,6 +81,7 @@ export default function App() {
   const [batchCandidates, setBatchCandidates] = useState<Array<{ folder: string; name: string; iconPath: string; iconName: string; checked: boolean; exact: boolean }>>([])
   const [libraryPage, setLibraryPage] = useState(1)
   const [libraryPageSize, setLibraryPageSize] = useState(100)
+  const [libraryPath, setLibraryPath] = useState('')
   const [batchPreviewMode, setBatchPreviewMode] = useState<'match' | 'apply' | 'restore'>('match')
   const [typeFilter, setTypeFilter] = useState<'all' | 'folder' | 'shortcut' | 'application'>('all')
 
@@ -111,6 +112,16 @@ export default function App() {
     })()
     return () => { mounted = false }
   }, [])
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const res = await window.api.getIconLibraryPath?.()
+      if (mounted && res && res.ok) setLibraryPath(res.path)
+    })()
+    return () => { mounted = false }
+  }, [])
+
+
 
   useEffect(() => {
     loadLibrary()
@@ -144,7 +155,7 @@ export default function App() {
     setSelectedFolderItem(item)
   }, [locale])
 
-  
+
 
   const apply = useCallback(async () => {
     const ok = await window.api.applyIcon(folder, icon)
@@ -209,9 +220,9 @@ export default function App() {
     e.preventDefault()
   }, [])
 
-  
 
-  
+
+
 
   const recommendations = useMemo(() => {
     if (!selectedFolderItem || !libraryIcons.length) return [] as Array<{ name: string; path: string; score: number }>
@@ -505,7 +516,7 @@ export default function App() {
         />
 
         <div className="flex-1 flex flex-col">
-          <div className="px-6 mt-4">
+          <div className="px-4 mt-4">
             <LibraryToolbar
               onImportIcons={pickIcon}
               onConvertPng={convertPng}
@@ -525,11 +536,12 @@ export default function App() {
             setSizePickerImages(items)
             setSizePickerOpen(true)
               }}
-              onOpenLibrary={async () => { await window.api.openIconLibraryFolder() }}
-              onRefresh={async () => { const res = await window.api.resetIconLibraryPath(); if (res.ok) await loadLibrary() }}
+              onOpenLibrary={async () => { const res = await window.api.chooseIconLibraryFolder(); if (res.ok) { setLibraryPath(res.path); await loadLibrary() } }}
+              onRefresh={async () => { await loadLibrary() }}
               onClearFilter={() => { setRecommendFilterActive(false); setSearchQuery(''); setLibraryPage(1) }}
               canClear={!!(recommendFilterActive || searchQuery)}
               locale={locale}
+              libraryPath={libraryPath}
             />
           </div>
           <MacScrollbar className="flex-1 px-6 pb-6" suppressScrollX skin={isDark ? 'dark' : 'light'}>
