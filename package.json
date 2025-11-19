@@ -20,7 +20,7 @@
     "productName": "iconPanda",
     "directories": {
       "buildResources": "build",
-      "output": "D:/codes/release"
+      "output": "release"
       
     },
     "files": [

@@ -470,7 +470,7 @@ export default function App() {
         onChangeLocale={(l) => setLocale(l)}
         appVersion={appVersion}
         onCopyGithub={async () => {
-          const url = 'https://github.com/'
+          const url = 'https://github.com/uiuibujor/iconPanda/'
           const ok = await window.api.copyToClipboard?.(url)
           return !!ok
         }}
