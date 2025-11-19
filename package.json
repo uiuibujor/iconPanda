@@ -1,6 +1,6 @@
 {
   "name": "iconpanda",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "main": "src/electron/main.js",
   "type": "module",
@@ -11,13 +11,13 @@
     "dist": "electron-builder"
   },
   "build": {
-    "appId": "com.iconhelper.app",
+    "appId": "com.iconpanda.app",
 
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
   },
-    "productName": "IconPanda",
+    "productName": "iconPanda",
     "directories": {
       "buildResources": "build",
       "output": "D:/codes/release"

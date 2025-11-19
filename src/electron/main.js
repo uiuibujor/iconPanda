@@ -19,7 +19,10 @@ function ensureDir(dir) {
 function getIconLibraryPath() {
   let dir = store.get('iconLibraryPath')
   if (typeof dir !== 'string' || !dir) {
-    const defaultDir = path.join(app.getPath('userData'), 'iconlibrary')
+    // 在生产环境使用安装目录，开发环境使用用户数据目录
+    const defaultDir = app.isPackaged
+      ? path.join(path.dirname(process.execPath), 'iconlibrary')
+      : path.join(app.getPath('userData'), 'iconlibrary')
     dir = defaultDir
     store.set('iconLibraryPath', dir)
   }
@@ -686,7 +689,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('reset-icon-library-path', async () => {
     try {
-      const dir = path.join(app.getPath('userData'), 'iconlibrary')
+      // 在生产环境使用安装目录，开发环境使用用户数据目录
+      const dir = app.isPackaged
+        ? path.join(path.dirname(process.execPath), 'iconlibrary')
+        : path.join(app.getPath('userData'), 'iconlibrary')
       store.set('iconLibraryPath', dir)
       ensureDir(dir)
       return { ok: true, path: dir }

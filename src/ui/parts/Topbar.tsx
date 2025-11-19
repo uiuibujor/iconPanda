@@ -40,7 +40,7 @@ export default function TopBar(props: Props) {
             <img src={logoSrc} alt="logo" className="w-10 h-10 object-contain" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-800 dark:text-white">{t('IconPanda', 'IconPanda')}</h1>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white">{t('iconPanda', 'iconPanda')}</h1>
             <p className="text-xs text-gray-500">{t('统一管理不同类型的图标', 'Manage different icon types uniformly')}</p>
           </div>
         </div>
