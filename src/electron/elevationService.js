@@ -8,10 +8,18 @@ import { existsSync, writeFileSync, unlinkSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
+import { app } from 'electron'
 
 // 加载原生模块
 const require = createRequire(import.meta.url)
-const nativeModule = require(join(dirname(fileURLToPath(import.meta.url)), '../../native/index.js'))
+
+// 打包后的路径：process.resourcesPath/native/index.js
+// 开发模式的路径：项目根目录/native/index.js
+const nativeModulePath = app.isPackaged
+  ? join(process.resourcesPath, 'native/index.js')
+  : join(dirname(fileURLToPath(import.meta.url)), '../../native/index.js')
+
+const nativeModule = require(nativeModulePath)
 
 /**
  * 系统保护目录列表

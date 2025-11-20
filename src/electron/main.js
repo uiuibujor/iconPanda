@@ -11,7 +11,31 @@ import { createRequire } from 'node:module'
 import { needsElevation, runElevated, runElevatedBatch } from './elevationService.js'
 
 const require = createRequire(import.meta.url)
-const nativeModule = require(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../native/index.js'))
+
+function resolveNativeModulePath() {
+  const devPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../native/index.js')
+
+  // 开发环境直接使用源码目录
+  if (!app.isPackaged) return devPath
+
+  // 生产环境：优先从 resources/native 加载，其次尝试 app.asar.unpacked
+  const candidates = [
+    path.join(process.resourcesPath || '', 'native', 'index.js'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'native', 'index.js'),
+    devPath
+  ]
+
+  for (const p of candidates) {
+    try {
+      if (p && fs.existsSync(p)) return p
+    } catch {}
+  }
+
+  // 找不到就返回首选路径（让后续 require 抛出明确错误）
+  return candidates[0]
+}
+
+const nativeModule = require(resolveNativeModulePath())
 
 const store = new Store({ name: 'settings' })
 
@@ -562,7 +586,49 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('restore-icon', async (_e, folder) => {
-    return restoreFolderIcon(folder)
+    if (!folder) return false
+
+    try {
+      // 检查是否需要管理员权限
+      if (needsElevation(folder)) {
+        console.log(`[IPC] restore-icon: needs elevation for ${folder}`)
+
+        const result = await dialog.showMessageBox({
+          type: 'warning',
+          title: '需要管理员权限',
+          message: '此文件夹位于系统保护目录中',
+          detail: `目标路径：${folder}\n\n还原此文件夹的图标需要管理员权限。点击"确定"将弹出系统权限请求。`,
+          buttons: ['确定', '取消'],
+          defaultId: 0,
+          cancelId: 1
+        })
+
+        if (result.response !== 0) {
+          console.log('[IPC] restore-icon: user cancelled elevation')
+          return false
+        }
+
+        const success = await runElevated('clear', folder)
+        if (!success) {
+          await dialog.showErrorBox(
+            '操作失败',
+            '以管理员权限执行还原操作失败。可能是用户拒绝了权限请求，或提权工具未正确安装。'
+          )
+          return false
+        }
+
+        console.log('[IPC] restore-icon: elevated clear succeeded')
+        // 提权进程内部已尝试刷新缓存，这里再调用一次确保资源管理器和预览更新
+        try { refreshIconCache(folder) } catch {}
+        return true
+      }
+
+      // 普通权限下直接执行
+      return restoreFolderIcon(folder)
+    } catch (err) {
+      console.error('[IPC] restore-icon error:', err)
+      return false
+    }
   })
 
   // 批量还原图标（不立即刷新缓存，提升性能）

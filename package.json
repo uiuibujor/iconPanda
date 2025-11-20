@@ -15,16 +15,14 @@
   },
   "build": {
     "appId": "com.iconpanda.app",
-
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-  },
+    },
     "productName": "iconPanda",
     "directories": {
       "buildResources": "build",
       "output": "release"
-      
     },
     "files": [
       "dist/**",
@@ -33,6 +31,23 @@
       "!src/electron/preload.ts",
       "!src/electron/preload.js",
       "node_modules/**"
+    ],
+    "asarUnpack": [
+      "native/**"
+    ],
+    "extraResources": [
+      {
+        "from": "native/build/Release/folder_icon_native.node",
+        "to": "native/build/Release/folder_icon_native.node"
+      },
+      {
+        "from": "native/index.js",
+        "to": "native/index.js"
+      },
+      {
+        "from": "native/bin/ElevatedWorker.exe",
+        "to": "native/bin/ElevatedWorker.exe"
+      }
     ],
     "win": {
       "icon": "build/icons/icon.ico"
