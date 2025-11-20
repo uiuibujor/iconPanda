@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process'
 import Store from 'electron-store'
 import pngToIco from 'png-to-ico'
 import { createRequire } from 'node:module'
+import { needsElevation, runElevated } from './elevationService.js'
 
 const require = createRequire(import.meta.url)
 const nativeModule = require(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../native/index.js'))
@@ -411,20 +412,106 @@ app.whenReady().then(() => {
 
   ipcMain.handle('apply-icon', async (_e, folder, icon) => {
     if (!folder || !icon) return false
-    const copied = copyIconToFolder(folder, icon)
-    // 使用绝对路径而不是相对路径！
-    const okIni = await ensureDesktopIni(folder, copied)
-    if (!okIni) return false
-    setFolderAttributes(folder)
-    refreshIconCache(folder)
-    return true
+
+    try {
+      // 检查是否需要管理员权限
+      if (needsElevation(folder)) {
+        console.log(`[IPC] apply-icon: needs elevation for ${folder}`)
+
+        // 弹出提示对话框
+        const result = await dialog.showMessageBox({
+          type: 'warning',
+          title: '需要管理员权限',
+          message: '此文件夹位于系统保护目录中',
+          detail: `目标路径：${folder}\n\n修改此文件夹需要管理员权限。点击"确定"将弹出系统权限请求。`,
+          buttons: ['确定', '取消'],
+          defaultId: 0,
+          cancelId: 1
+        })
+
+        if (result.response !== 0) {
+          console.log(`[IPC] apply-icon: user cancelled elevation`)
+          return false
+        }
+
+        // 调用提权进程
+        const success = await runElevated('set', folder, icon)
+        if (!success) {
+          await dialog.showErrorBox(
+            '操作失败',
+            '以管理员权限执行操作失败。可能是用户拒绝了权限请求，或提权工具未正确安装。'
+          )
+          return false
+        }
+
+        console.log(`[IPC] apply-icon: elevated operation succeeded`)
+        return true
+      }
+
+      // 普通权限下直接执行
+      const copied = copyIconToFolder(folder, icon)
+      const okIni = await ensureDesktopIni(folder, copied)
+      if (!okIni) return false
+      setFolderAttributes(folder)
+      refreshIconCache(folder)
+      return true
+
+    } catch (err) {
+      console.error('[IPC] apply-icon error:', err)
+
+      // 如果是权限错误，给出友好提示
+      if (err.code === 'EPERM' || err.code === 'EACCES') {
+        await dialog.showErrorBox(
+          '权限不足',
+          `无法修改此文件夹：${folder}\n\n错误：${err.message}\n\n请尝试以管理员身份运行本程序。`
+        )
+      }
+
+      return false
+    }
   })
 
   // 批量应用图标（不立即刷新缓存，提升性能）
   ipcMain.handle('apply-icon-batch', async (_e, items) => {
     if (!Array.isArray(items) || items.length === 0) return { ok: false, results: [] }
+
+    // 分组：需要提权的和不需要提权的
+    const normalItems = []
+    const elevatedItems = []
+
+    for (const item of items) {
+      if (needsElevation(item.folder)) {
+        elevatedItems.push(item)
+      } else {
+        normalItems.push(item)
+      }
+    }
+
+    // 如果有需要提权的项目，先询问用户
+    if (elevatedItems.length > 0) {
+      const result = await dialog.showMessageBox({
+        type: 'warning',
+        title: '需要管理员权限',
+        message: `批量操作中有 ${elevatedItems.length} 个文件夹需要管理员权限`,
+        detail: `这些文件夹位于系统保护目录中（如 Program Files）。\n\n点击"确定"将为这些文件夹弹出系统权限请求。`,
+        buttons: ['确定', '跳过这些文件夹', '取消全部操作'],
+        defaultId: 0,
+        cancelId: 2
+      })
+
+      if (result.response === 2) {
+        // 用户取消全部操作
+        return { ok: false, results: [] }
+      } else if (result.response === 1) {
+        // 用户选择跳过需要提权的文件夹
+        elevatedItems.length = 0
+      }
+    }
+
     const results = []
-    for (const { folder, icon } of items) {
+
+    // 处理普通权限的项目
+    for (const { folder, icon } of normalItems) {
       try {
         if (!folder || !icon) {
           results.push({ folder, ok: false })
@@ -437,12 +524,24 @@ app.whenReady().then(() => {
           continue
         }
         setFolderAttributes(folder)
-        // 注意：这里不调用 refreshIconCache，等批量完成后统一刷新
         results.push({ folder, ok: true })
       } catch (err) {
+        console.error(`[IPC] apply-icon-batch error for ${folder}:`, err)
         results.push({ folder, ok: false })
       }
     }
+
+    // 处理需要提权的项目
+    for (const { folder, icon } of elevatedItems) {
+      try {
+        const success = await runElevated('set', folder, icon)
+        results.push({ folder, ok: success })
+      } catch (err) {
+        console.error(`[IPC] apply-icon-batch elevated error for ${folder}:`, err)
+        results.push({ folder, ok: false })
+      }
+    }
+
     // 批量完成后，只刷新一次全局图标缓存
     refreshIconCache()
     return { ok: true, results }
@@ -455,8 +554,44 @@ app.whenReady().then(() => {
   // 批量还原图标（不立即刷新缓存，提升性能）
   ipcMain.handle('restore-icon-batch', async (_e, folders) => {
     if (!Array.isArray(folders) || folders.length === 0) return { ok: false, results: [] }
-    const results = []
+
+    // 分组：需要提权的和不需要提权的
+    const normalFolders = []
+    const elevatedFolders = []
+
     for (const folder of folders) {
+      if (needsElevation(folder)) {
+        elevatedFolders.push(folder)
+      } else {
+        normalFolders.push(folder)
+      }
+    }
+
+    // 如果有需要提权的项目，先询问用户
+    if (elevatedFolders.length > 0) {
+      const result = await dialog.showMessageBox({
+        type: 'warning',
+        title: '需要管理员权限',
+        message: `批量还原中有 ${elevatedFolders.length} 个文件夹需要管理员权限`,
+        detail: `这些文件夹位于系统保护目录中（如 Program Files）。\n\n点击"确定"将为这些文件夹弹出系统权限请求。`,
+        buttons: ['确定', '跳过这些文件夹', '取消全部操作'],
+        defaultId: 0,
+        cancelId: 2
+      })
+
+      if (result.response === 2) {
+        // 用户取消全部操作
+        return { ok: false, results: [] }
+      } else if (result.response === 1) {
+        // 用户选择跳过需要提权的文件夹
+        elevatedFolders.length = 0
+      }
+    }
+
+    const results = []
+
+    // 处理普通权限的文件夹
+    for (const folder of normalFolders) {
       try {
         if (!folder) {
           results.push({ folder, ok: false })
@@ -474,12 +609,24 @@ app.whenReady().then(() => {
         clearOldIconFiles(folder)
         // 移除文件夹的系统和只读属性
         try { execFileSync('attrib', ['-s', '-r', folder]) } catch {}
-        // 注意：这里不调用 refreshIconCache
         results.push({ folder, ok: true })
       } catch (err) {
+        console.error(`[IPC] restore-icon-batch error for ${folder}:`, err)
         results.push({ folder, ok: false })
       }
     }
+
+    // 处理需要提权的文件夹
+    for (const folder of elevatedFolders) {
+      try {
+        const success = await runElevated('clear', folder)
+        results.push({ folder, ok: success })
+      } catch (err) {
+        console.error(`[IPC] restore-icon-batch elevated error for ${folder}:`, err)
+        results.push({ folder, ok: false })
+      }
+    }
+
     // 批量完成后，只刷新一次全局图标缓存
     refreshIconCache()
     return { ok: true, results }

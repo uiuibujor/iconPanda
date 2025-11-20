@@ -103,10 +103,25 @@ function isNativeModuleAvailable() {
   return nativeModule !== null;
 }
 
+/**
+ * 以管理员权限运行程序
+ * @param {string} exePath - 可执行文件路径
+ * @param {string} arguments - 命令行参数
+ * @returns {{ success: boolean, errorCode: number }}
+ */
+function runElevated(exePath, arguments) {
+  if (!nativeModule) {
+    throw new Error('Native module not loaded. Please run: npm run rebuild');
+  }
+
+  return nativeModule.runElevated(exePath, arguments);
+}
+
 module.exports = {
   setFolderIcon,
   clearFolderIcon,
   refreshIconCache,
-  isNativeModuleAvailable
+  isNativeModuleAvailable,
+  runElevated
 };
 

@@ -162,6 +162,66 @@ Napi::Value RefreshIconCache(const Napi::CallbackInfo& info) {
     return Napi::Boolean::New(env, true);
 }
 
+// 以管理员权限运行程序
+// 参数：exePath, arguments
+// 返回：{ success: boolean, errorCode: number }
+Napi::Value RunElevated(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+
+    if (info.Length() < 2) {
+        Napi::TypeError::New(env, "Expected 2 arguments: exePath, arguments")
+            .ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    if (!info[0].IsString() || !info[1].IsString()) {
+        Napi::TypeError::New(env, "Arguments must be strings")
+            .ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    // 获取参数
+    std::u16string exePath = info[0].As<Napi::String>().Utf16Value();
+    std::u16string arguments = info[1].As<Napi::String>().Utf16Value();
+
+    // 使用 ShellExecuteW 以管理员权限启动进程
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+    sei.lpVerb = L"runas";  // 关键：触发 UAC
+    sei.lpFile = (LPCWSTR)exePath.c_str();
+    sei.lpParameters = (LPCWSTR)arguments.c_str();
+    sei.nShow = SW_HIDE;
+
+    BOOL result = ShellExecuteExW(&sei);
+
+    Napi::Object returnObj = Napi::Object::New(env);
+
+    if (!result) {
+        DWORD errorCode = GetLastError();
+        returnObj.Set("success", Napi::Boolean::New(env, false));
+        returnObj.Set("errorCode", Napi::Number::New(env, errorCode));
+        return returnObj;
+    }
+
+    // 等待进程完成
+    if (sei.hProcess != nullptr) {
+        WaitForSingleObject(sei.hProcess, INFINITE);
+
+        DWORD exitCode = 0;
+        GetExitCodeProcess(sei.hProcess, &exitCode);
+
+        CloseHandle(sei.hProcess);
+
+        returnObj.Set("success", Napi::Boolean::New(env, exitCode == 0));
+        returnObj.Set("errorCode", Napi::Number::New(env, exitCode));
+    } else {
+        returnObj.Set("success", Napi::Boolean::New(env, true));
+        returnObj.Set("errorCode", Napi::Number::New(env, 0));
+    }
+
+    return returnObj;
+}
+
 // 模块初始化
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set(Napi::String::New(env, "setFolderIcon"),
@@ -170,6 +230,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
                 Napi::Function::New(env, ClearFolderIcon));
     exports.Set(Napi::String::New(env, "refreshIconCache"),
                 Napi::Function::New(env, RefreshIconCache));
+    exports.Set(Napi::String::New(env, "runElevated"),
+                Napi::Function::New(env, RunElevated));
     return exports;
 }
 
