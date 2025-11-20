@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process'
 import Store from 'electron-store'
 import pngToIco from 'png-to-ico'
 import { createRequire } from 'node:module'
-import { needsElevation, runElevated } from './elevationService.js'
+import { needsElevation, runElevated, runElevatedBatch } from './elevationService.js'
 
 const require = createRequire(import.meta.url)
 const nativeModule = require(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../native/index.js'))
@@ -531,14 +531,28 @@ app.whenReady().then(() => {
       }
     }
 
-    // 处理需要提权的项目
-    for (const { folder, icon } of elevatedItems) {
+    // 处理需要提权的项目（批量模式，只弹一次 UAC）
+    if (elevatedItems.length > 0) {
       try {
-        const success = await runElevated('set', folder, icon)
-        results.push({ folder, ok: success })
+        // 构建批量任务列表
+        const tasks = elevatedItems.map(({ folder, icon }) => ({
+          command: 'set',
+          folderPath: folder,
+          iconPath: icon
+        }))
+
+        // 批量执行，只弹一次 UAC
+        const success = await runElevatedBatch(tasks)
+
+        // 记录结果
+        for (const { folder } of elevatedItems) {
+          results.push({ folder, ok: success })
+        }
       } catch (err) {
-        console.error(`[IPC] apply-icon-batch elevated error for ${folder}:`, err)
-        results.push({ folder, ok: false })
+        console.error(`[IPC] apply-icon-batch elevated error:`, err)
+        for (const { folder } of elevatedItems) {
+          results.push({ folder, ok: false })
+        }
       }
     }
 
@@ -616,14 +630,27 @@ app.whenReady().then(() => {
       }
     }
 
-    // 处理需要提权的文件夹
-    for (const folder of elevatedFolders) {
+    // 处理需要提权的文件夹（批量模式，只弹一次 UAC）
+    if (elevatedFolders.length > 0) {
       try {
-        const success = await runElevated('clear', folder)
-        results.push({ folder, ok: success })
+        // 构建批量任务列表
+        const tasks = elevatedFolders.map(folder => ({
+          command: 'clear',
+          folderPath: folder
+        }))
+
+        // 批量执行，只弹一次 UAC
+        const success = await runElevatedBatch(tasks)
+
+        // 记录结果
+        for (const folder of elevatedFolders) {
+          results.push({ folder, ok: success })
+        }
       } catch (err) {
-        console.error(`[IPC] restore-icon-batch elevated error for ${folder}:`, err)
-        results.push({ folder, ok: false })
+        console.error(`[IPC] restore-icon-batch elevated error:`, err)
+        for (const folder of elevatedFolders) {
+          results.push({ folder, ok: false })
+        }
       }
     }
 

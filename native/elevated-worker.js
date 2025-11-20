@@ -204,43 +204,115 @@ function clearFolderIcon(folderPath) {
 }
 
 /**
+ * 批量处理函数
+ */
+function processBatch(batchFilePath) {
+  log(`Processing batch file: ${batchFilePath}`);
+
+  if (!fs.existsSync(batchFilePath)) {
+    throw new Error(`Batch file not found: ${batchFilePath}`);
+  }
+
+  // 读取批量任务文件
+  const batchData = JSON.parse(fs.readFileSync(batchFilePath, 'utf8'));
+  log(`Batch contains ${batchData.tasks.length} tasks`);
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (let i = 0; i < batchData.tasks.length; i++) {
+    const task = batchData.tasks[i];
+    log(`\n--- Task ${i + 1}/${batchData.tasks.length} ---`);
+    log(`Command: ${task.command}`);
+    log(`Folder: ${task.folderPath}`);
+
+    try {
+      if (task.command === 'set') {
+        log(`Icon: ${task.iconPath}`);
+        setFolderIcon(task.folderPath, task.iconPath);
+        successCount++;
+      } else if (task.command === 'clear') {
+        clearFolderIcon(task.folderPath);
+        successCount++;
+      } else {
+        log(`ERROR: Unknown command: ${task.command}`);
+        failCount++;
+      }
+    } catch (err) {
+      log(`ERROR: Task failed: ${err.message}`);
+      failCount++;
+    }
+  }
+
+  log(`\n=== Batch Processing Complete ===`);
+  log(`Success: ${successCount}, Failed: ${failCount}`);
+
+  // 删除临时批量文件
+  try {
+    fs.unlinkSync(batchFilePath);
+    log('Batch file deleted');
+  } catch (err) {
+    log('WARNING: Failed to delete batch file:', err.message);
+  }
+
+  return failCount === 0;
+}
+
+/**
  * 主函数
  */
 function main() {
   const args = process.argv.slice(2);
 
-  if (args.length < 2) {
+  if (args.length < 1) {
+    log('ERROR: No command specified');
     console.error('Usage:');
     console.error('  elevated-worker.exe set <folderPath> <iconPath>');
     console.error('  elevated-worker.exe clear <folderPath>');
+    console.error('  elevated-worker.exe batch <batchFilePath>');
     process.exit(1);
   }
 
   const command = args[0].toLowerCase();
-  const folderPath = args[1];
 
   try {
-    switch (command) {
-      case 'set':
-        if (args.length < 3) {
-          throw new Error('Missing iconPath argument for "set" command');
-        }
-        const iconPath = args[2];
-        setFolderIcon(folderPath, iconPath);
-        break;
+    if (command === 'batch') {
+      // 批量处理模式
+      if (args.length < 2) {
+        throw new Error('batch command requires batchFilePath argument');
+      }
+      const batchFilePath = args[1];
+      const success = processBatch(batchFilePath);
+      process.exit(success ? 0 : 1);
 
-      case 'clear':
-        clearFolderIcon(folderPath);
-        break;
+    } else if (command === 'set') {
+      // 单个设置模式
+      if (args.length < 3) {
+        throw new Error('set command requires folderPath and iconPath arguments');
+      }
+      const folderPath = args[1];
+      const iconPath = args[2];
+      setFolderIcon(folderPath, iconPath);
+      log('Operation completed successfully');
+      process.exit(0);
 
-      default:
-        throw new Error(`Unknown command: ${command}`);
+    } else if (command === 'clear') {
+      // 单个清除模式
+      if (args.length < 2) {
+        throw new Error('clear command requires folderPath argument');
+      }
+      const folderPath = args[1];
+      clearFolderIcon(folderPath);
+      log('Operation completed successfully');
+      process.exit(0);
+
+    } else {
+      throw new Error(`Unknown command: ${command}`);
     }
 
-    process.exit(0);
   } catch (err) {
-    console.error('[ElevatedWorker] Error:', err.message);
-    console.error(err.stack);
+    log('ERROR: Operation failed:', err.message);
+    log('Stack:', err.stack);
     process.exit(1);
   }
 }

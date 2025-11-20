@@ -96,7 +96,7 @@ function getElevatedWorkerPath() {
 }
 
 /**
- * 以管理员权限运行 ElevatedWorker
+ * 以管理员权限运行 ElevatedWorker（单个任务）
  *
  * @param {string} command - 命令 ('set' 或 'clear')
  * @param {string} folderPath - 文件夹路径
@@ -137,6 +137,68 @@ export function runElevated(command, folderPath, iconPath = null) {
 
     } catch (err) {
       console.error(`[ElevationService] Error in runElevated:`, err)
+      resolve(false)
+    }
+  })
+}
+
+/**
+ * 以管理员权限批量处理任务（只弹一次 UAC）
+ *
+ * @param {Array<{command: string, folderPath: string, iconPath?: string}>} tasks - 任务列表
+ * @returns {Promise<boolean>} 是否成功
+ */
+export function runElevatedBatch(tasks) {
+  return new Promise((resolve) => {
+    try {
+      const workerPath = getElevatedWorkerPath()
+
+      // 创建临时批量任务文件
+      const { tmpdir } = require('node:os')
+      const batchFilePath = join(tmpdir(), `elevated-batch-${Date.now()}.json`)
+
+      const batchData = { tasks }
+      writeFileSync(batchFilePath, JSON.stringify(batchData, null, 2), 'utf8')
+
+      console.log(`[ElevationService] Created batch file: ${batchFilePath}`)
+      console.log(`[ElevationService] Batch contains ${tasks.length} tasks`)
+
+      // 构建参数：batch <batchFilePath>
+      const args = `"batch" "${batchFilePath}"`
+
+      console.log(`[ElevationService] Starting elevated batch process:`, {
+        workerPath,
+        arguments: args
+      })
+
+      // 使用原生模块的 runElevated 函数
+      const result = nativeModule.runElevated(workerPath, args)
+
+      console.log(`[ElevationService] Native runElevated result:`, result)
+
+      // 清理临时文件（如果 worker 没有删除）
+      if (existsSync(batchFilePath)) {
+        try {
+          unlinkSync(batchFilePath)
+          console.log(`[ElevationService] Cleaned up batch file`)
+        } catch (err) {
+          console.warn(`[ElevationService] Failed to clean up batch file:`, err.message)
+        }
+      }
+
+      if (result.success) {
+        console.log(`[ElevationService] Elevated batch operation succeeded`)
+        resolve(true)
+      } else {
+        console.error(`[ElevationService] Elevated batch operation failed with error code ${result.errorCode}`)
+        if (result.errorCode === 1223) {
+          console.log(`[ElevationService] User cancelled UAC prompt`)
+        }
+        resolve(false)
+      }
+
+    } catch (err) {
+      console.error(`[ElevationService] Error in runElevatedBatch:`, err)
       resolve(false)
     }
   })
