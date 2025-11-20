@@ -1,0 +1,14 @@
+{
+  "name": "folder-icon-native",
+  "version": "1.0.0",
+  "description": "Native module for setting folder icons on Windows",
+  "main": "index.js",
+  "gypfile": true,
+  "scripts": {
+    "install": "node-gyp rebuild"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.0.0"
+  }
+}
+

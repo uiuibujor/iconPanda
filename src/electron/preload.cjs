@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   pickApplication: () => ipcRenderer.invoke('pick-application'),
   pickApplications: () => ipcRenderer.invoke('pick-applications'),
   applyIcon: (folder, icon) => ipcRenderer.invoke('apply-icon', folder, icon),
+  applyIconBatch: (items) => ipcRenderer.invoke('apply-icon-batch', items),
   applyShortcutIcon: (lnk, icon) => ipcRenderer.invoke('apply-shortcut-icon', lnk, icon),
   getIconPreview: (iconPath) => ipcRenderer.invoke('get-icon-preview', iconPath),
   getFolderPreview: (folderPath) => ipcRenderer.invoke('get-folder-preview', folderPath),
@@ -27,6 +28,7 @@ contextBridge.exposeInMainWorld('api', {
   ,convertPngToIco: (pngPaths) => ipcRenderer.invoke('convert-png-to-ico', pngPaths)
   ,deleteLibraryIcon: (iconPath) => ipcRenderer.invoke('delete-library-icon', iconPath)
   ,restoreIcon: (folder) => ipcRenderer.invoke('restore-icon', folder)
+  ,restoreIconBatch: (folders) => ipcRenderer.invoke('restore-icon-batch', folders)
   ,restoreShortcutIcon: (lnk) => ipcRenderer.invoke('restore-shortcut-icon', lnk)
   ,applyApplicationIcon: (exe, icon) => ipcRenderer.invoke('apply-application-icon', exe, icon)
   ,restoreApplicationShortcut: (lnk) => ipcRenderer.invoke('restore-application-shortcut', lnk)

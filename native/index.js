@@ -1,0 +1,92 @@
+// Native module wrapper for folder icon operations
+const path = require('path');
+const fs = require('fs');
+
+let nativeModule = null;
+
+try {
+  // 尝试加载编译好的原生模块
+  nativeModule = require('./build/Release/folder_icon_native.node');
+} catch (err) {
+  console.warn('Native module not found, trying Debug build...');
+  try {
+    nativeModule = require('./build/Debug/folder_icon_native.node');
+  } catch (err2) {
+    console.error('Failed to load native module:', err2.message);
+    console.error('Please run: npm run rebuild');
+  }
+}
+
+/**
+ * 设置文件夹图标（支持中文路径）
+ * @param {string} folderPath - 文件夹路径
+ * @param {string} iconPath - 图标文件路径
+ * @returns {Promise<boolean>}
+ */
+async function setFolderIcon(folderPath, iconPath) {
+  if (!nativeModule) {
+    throw new Error('Native module not loaded. Please run: npm run rebuild');
+  }
+
+  if (!fs.existsSync(folderPath)) {
+    throw new Error(`Folder does not exist: ${folderPath}`);
+  }
+
+  if (!fs.existsSync(iconPath)) {
+    throw new Error(`Icon file does not exist: ${iconPath}`);
+  }
+
+  // 确保路径是绝对路径
+  const absFolder = path.resolve(folderPath);
+  const absIcon = path.resolve(iconPath);
+
+  return new Promise((resolve, reject) => {
+    try {
+      const result = nativeModule.setFolderIcon(absFolder, absIcon);
+      resolve(result);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
+ * 清除文件夹图标
+ * @param {string} folderPath - 文件夹路径
+ * @returns {Promise<boolean>}
+ */
+async function clearFolderIcon(folderPath) {
+  if (!nativeModule) {
+    throw new Error('Native module not loaded. Please run: npm run rebuild');
+  }
+
+  if (!fs.existsSync(folderPath)) {
+    throw new Error(`Folder does not exist: ${folderPath}`);
+  }
+
+  const absFolder = path.resolve(folderPath);
+
+  return new Promise((resolve, reject) => {
+    try {
+      const result = nativeModule.clearFolderIcon(absFolder);
+      resolve(result);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
+ * 检查原生模块是否可用
+ * @returns {boolean}
+ */
+function isNativeModuleAvailable() {
+  return nativeModule !== null;
+}
+
+module.exports = {
+  setFolderIcon,
+  clearFolderIcon,
+  isNativeModuleAvailable
+};
+

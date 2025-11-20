@@ -8,7 +8,9 @@
     "dev": "concurrently \"vite\" \"wait-on http://127.0.0.1:3000 && electron .\"",
     "build": "vite build",
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "install": "cd native && node-gyp rebuild",
+    "rebuild": "cd native && node-gyp rebuild"
   },
   "build": {
     "appId": "com.iconpanda.app",
@@ -55,7 +57,8 @@
     "win-lnk-parser": "^1.1.2",
     "windows-shortcuts-ps": "^1.0.1",
     "dot-prop": "^7.2.0",
-    "env-paths": "^3.0.0"
+    "env-paths": "^3.0.0",
+    "node-addon-api": "^8.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.8.6",
@@ -72,7 +75,8 @@
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "wait-on": "^8.0.2",
-    "@types/canvas-confetti": "^1.0.3"
+    "@types/canvas-confetti": "^1.0.3",
+    "node-gyp": "^10.0.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -29,6 +29,7 @@ declare global {
       pickApplication?: () => Promise<string>
       pickApplications?: () => Promise<string[]>
       applyIcon: (folder: string, icon: string) => Promise<boolean>
+      applyIconBatch?: (items: Array<{ folder: string; icon: string }>) => Promise<{ ok: boolean; results: Array<{ folder: string; ok: boolean }> }>
       applyShortcutIcon?: (lnk: string, icon: string) => Promise<boolean>
       applyApplicationIcon?: (exe: string, icon: string) => Promise<{ ok: boolean; shortcut: string }>
       getIconPreview: (iconPath: string) => Promise<{ ok: boolean; dataUrl: string }>
@@ -48,6 +49,7 @@ declare global {
       resetIconLibraryPath: () => Promise<{ ok: boolean; path?: string }>
       deleteLibraryIcon?: (iconPath: string) => Promise<boolean>
       restoreIcon: (folder: string) => Promise<boolean>
+      restoreIconBatch?: (folders: string[]) => Promise<{ ok: boolean; results: Array<{ folder: string; ok: boolean }> }>
       restoreShortcutIcon?: (lnk: string) => Promise<boolean>
       restoreApplicationShortcut?: (lnk: string) => Promise<boolean>
       windowMinimize: () => Promise<boolean>
@@ -712,31 +714,48 @@ export default function App() {
         setBatchProcessing(true)
         try {
           if (batchPreviewMode === 'restore') {
+            // 分组：文件夹、快捷方式、应用程序
+            const folderItems = targets.filter((c) => folders.find((f) => f.path === c.folder)?.type === 'folder')
+            const shortcutItems = targets.filter((c) => folders.find((f) => f.path === c.folder)?.type === 'shortcut')
+            const appItems = targets.filter((c) => folders.find((f) => f.path === c.folder)?.type === 'application')
+
             const success: string[] = []
-            for (const c of targets) {
-              const item = folders.find((f) => f.path === c.folder)
-              let ok = false
-              if (item?.type === 'folder') {
-                ok = await window.api.restoreIcon(c.folder)
-                if (ok) {
-                  const res = await window.api.getFolderPreview(c.folder)
-                  setFolderThumbs((prev) => ({ ...prev, [c.folder]: '' }))
+
+            // 批量还原文件夹图标（使用批量 API，大幅提升性能）
+            if (folderItems.length > 0) {
+              const batchResult = await window.api.restoreIconBatch?.(folderItems.map((c) => c.folder))
+              if (batchResult && batchResult.ok) {
+                for (const r of batchResult.results) {
+                  if (r.ok) {
+                    success.push(r.folder)
+                    setFolderThumbs((prev) => ({ ...prev, [r.folder]: '' }))
+                  }
                 }
-              } else if (item?.type === 'shortcut') {
-                ok = !!(await window.api.restoreShortcutIcon?.(c.folder))
+              }
+            }
+
+            // 逐个还原快捷方式（暂无批量 API）
+            for (const c of shortcutItems) {
+              const ok = !!(await window.api.restoreShortcutIcon?.(c.folder))
+              if (ok) {
+                success.push(c.folder)
+                const res = await window.api.getShortcutPreview?.(c.folder)
+                setItemThumbs((prev) => ({ ...prev, [c.folder]: res && res.ok ? res.iconDataUrl : (prev[c.folder] || '') }))
+              }
+            }
+
+            // 逐个还原应用程序快捷方式（暂无批量 API）
+            for (const c of appItems) {
+              const lnk = createdShortcuts[c.folder]
+              if (lnk) {
+                const ok = !!(await window.api.restoreApplicationShortcut?.(lnk))
                 if (ok) {
-                  const res = await window.api.getShortcutPreview?.(c.folder)
-                  setItemThumbs((prev) => ({ ...prev, [c.folder]: res && res.ok ? res.iconDataUrl : (prev[c.folder] || '') }))
-                }
-              } else if (item?.type === 'application') {
-                const lnk = createdShortcuts[c.folder]
-                if (lnk) ok = !!(await window.api.restoreApplicationShortcut?.(lnk))
-                if (ok) {
+                  success.push(c.folder)
                   setCreatedShortcuts((prev) => { const n = { ...prev }; delete n[c.folder]; return n })
                 }
               }
-              if (ok) success.push(c.folder)
             }
+
             if (success.length) {
               setFolders((prev) => prev.map((f) => (success.includes(f.path) ? { ...f, status: '待处理' } : f)))
               setAppliedIcons((prev) => { const n = { ...prev }; success.forEach((p) => { delete n[p] }); return n })
@@ -745,23 +764,40 @@ export default function App() {
             setBatchPreviewOpen(false)
             return
           }
+          // 分组：文件夹、快捷方式、应用程序
+          const folderItems = targets.filter((c) => folders.find((f) => f.path === c.folder)?.type === 'folder')
+          const shortcutItems = targets.filter((c) => folders.find((f) => f.path === c.folder)?.type === 'shortcut')
+          const appItems = targets.filter((c) => folders.find((f) => f.path === c.folder)?.type === 'application')
+
           const results: { p: string; ok: boolean; thumb?: string; applied?: string }[] = []
-          for (const c of targets) {
-            const item = folders.find((f) => f.path === c.folder)
-            let ok = false
-            let thumb = ''
-            if (item?.type === 'folder') {
-              ok = await window.api.applyIcon(c.folder, c.iconPath)
-              if (ok) { const res = await window.api.getFolderPreview(c.folder); thumb = res.ok ? res.iconDataUrl : '' }
-            } else if (item?.type === 'shortcut') {
-              ok = !!(await window.api.applyShortcutIcon?.(c.folder, c.iconPath))
-              if (ok) { const res = await window.api.getShortcutPreview?.(c.folder); thumb = res && res.ok ? res.iconDataUrl : '' }
-            } else if (item?.type === 'application') {
-              const r = await window.api.applyApplicationIcon?.(c.folder, c.iconPath)
-              ok = !!(r && r.ok)
-              if (ok && r) setCreatedShortcuts((prev) => ({ ...prev, [c.folder]: r.shortcut }))
+
+          // 批量处理文件夹（使用批量 API，大幅提升性能）
+          if (folderItems.length > 0) {
+            const batchResult = await window.api.applyIconBatch?.(folderItems.map((c) => ({ folder: c.folder, icon: c.iconPath })))
+            if (batchResult && batchResult.ok) {
+              for (const r of batchResult.results) {
+                const c = folderItems.find((item) => item.folder === r.folder)
+                let thumb = ''
+                if (r.ok) { const res = await window.api.getFolderPreview(r.folder); thumb = res.ok ? res.iconDataUrl : '' }
+                results.push({ p: r.folder, ok: r.ok, thumb, applied: c?.iconPath || '' })
+              }
             }
+          }
+
+          // 逐个处理快捷方式（暂无批量 API）
+          for (const c of shortcutItems) {
+            const ok = !!(await window.api.applyShortcutIcon?.(c.folder, c.iconPath))
+            let thumb = ''
+            if (ok) { const res = await window.api.getShortcutPreview?.(c.folder); thumb = res && res.ok ? res.iconDataUrl : '' }
             results.push({ p: c.folder, ok, thumb, applied: c.iconPath })
+          }
+
+          // 逐个处理应用程序（暂无批量 API）
+          for (const c of appItems) {
+            const r = await window.api.applyApplicationIcon?.(c.folder, c.iconPath)
+            const ok = !!(r && r.ok)
+            if (ok && r) setCreatedShortcuts((prev) => ({ ...prev, [c.folder]: r.shortcut }))
+            results.push({ p: c.folder, ok, thumb: '', applied: c.iconPath })
           }
           const success = results.filter((r) => r.ok)
           if (success.length) {

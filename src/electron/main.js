@@ -7,6 +7,10 @@ import os from 'node:os'
 import { execFileSync } from 'node:child_process'
 import Store from 'electron-store'
 import pngToIco from 'png-to-ico'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const nativeModule = require(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../native/index.js'))
 
 const store = new Store({ name: 'settings' })
 
@@ -103,15 +107,18 @@ function createWindow() {
   })
 }
 
-function ensureDesktopIni(folder, iconPath) {
+async function ensureDesktopIni(folder, iconPath) {
   try {
-    const iniPath = path.join(folder, 'desktop.ini')
-    try { if (fs.existsSync(iniPath)) fs.unlinkSync(iniPath) } catch {}
-    const content = `[.ShellClassInfo]\r\nIconFile=${iconPath}\r\nIconIndex=0\r\n`
-    fs.writeFileSync(iniPath, content, { encoding: 'utf8' })
-    try { execFileSync('attrib', ['+h', '+s', iniPath]) } catch {}
+    // 使用原生 C++ 模块直接调用 Windows API，完美支持中文路径
+    if (!nativeModule.isNativeModuleAvailable()) {
+      console.error('Native module not available, falling back to legacy method')
+      return false
+    }
+
+    await nativeModule.setFolderIcon(folder, iconPath)
     return true
-  } catch {
+  } catch (err) {
+    console.error('ensureDesktopIni failed:', err)
     return false
   }
 }
@@ -120,22 +127,61 @@ function setFolderAttributes(folder) {
   try { execFileSync('attrib', ['+s', '+r', folder]) } catch {}
 }
 
+function clearOldIconFiles(folder) {
+  try {
+    const files = fs.readdirSync(folder)
+    for (const file of files) {
+      // 删除所有旧的图标文件：folder_*.ico, .folder.ico, folder.ico
+      if (file.match(/^\.?folder(_\d+)?\.ico$/i)) {
+        const filePath = path.join(folder, file)
+        try {
+          // 移除只读和隐藏属性
+          execFileSync('attrib', ['-h', '-r', filePath])
+          fs.unlinkSync(filePath)
+        } catch {}
+      }
+    }
+  } catch {}
+}
+
 function copyIconToFolder(folder, sourceIcon) {
-  const target = path.join(folder, '.folder.ico')
-  try { if (fs.existsSync(target)) fs.unlinkSync(target) } catch {}
+  // 首先清理所有旧的图标文件
+  clearOldIconFiles(folder)
+
+  // 使用时间戳生成唯一文件名，破坏 Windows 图标缓存
+  const timestamp = Date.now().toString()
+  const uniqueIconName = `folder_${timestamp}.ico`
+  const target = path.join(folder, uniqueIconName)
+
+  // 复制新图标文件
   fs.copyFileSync(sourceIcon, target)
+
+  // 设置为隐藏文件
   try { execFileSync('attrib', ['+h', target]) } catch {}
+
   return target
 }
 
 function restoreFolderIcon(folder) {
   try {
     if (!folder) return false
+
+    // 删除 desktop.ini
     const iniPath = path.join(folder, 'desktop.ini')
-    const icoPath = path.join(folder, '.folder.ico')
-    try { if (fs.existsSync(iniPath)) fs.unlinkSync(iniPath) } catch {}
-    try { if (fs.existsSync(icoPath)) fs.unlinkSync(icoPath) } catch {}
+    try {
+      if (fs.existsSync(iniPath)) {
+        execFileSync('attrib', ['-h', '-s', '-r', iniPath])
+        fs.unlinkSync(iniPath)
+      }
+    } catch {}
+
+    // 清理所有图标文件
+    clearOldIconFiles(folder)
+
+    // 移除文件夹的系统和只读属性
     try { execFileSync('attrib', ['-s', '-r', folder]) } catch {}
+
+    // 刷新图标缓存
     refreshIconCache(folder)
     return true
   } catch {
@@ -217,41 +263,47 @@ function deleteShortcutFile(lnkPath) {
 }
 
 function refreshIconCache(folderPath = null) {
-  // 方法1: 使用 SHChangeNotify 通知 Explorer 刷新特定文件夹或整个系统
+  // 方法1: 使用 SHChangeNotify + PIDL + 同步刷新 + 广播消息，尽量做到立即刷新
   try {
     let tmpDir = null
     let scriptPath = null
     try {
       const escapedPath = folderPath ? folderPath.replace(/\\/g, '\\\\').replace(/"/g, '`"') : ''
-      const psScript = folderPath
-        ? `
+      const psScript = `
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-public class Shell32 {
-    [DllImport("shell32.dll")]
-    public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
+public static class ShellHelper {
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr ILCreateFromPath(string pszPath);
+
+    [DllImport("shell32.dll", SetLastError = true)]
+    public static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
+    [DllImport("ole32.dll")]
+    public static extern void CoTaskMemFree(IntPtr pv);
 }
 "@
+
 $path = "${escapedPath}"
-$ptr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($path)
-try {
-    [Shell32]::SHChangeNotify(0x00002000, 0x0005, $ptr, [IntPtr]::Zero)
-    [Shell32]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
-} finally {
-    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptr)
+$pidl = [IntPtr]::Zero
+
+if (-not [string]::IsNullOrWhiteSpace($path)) {
+    $pidl = [ShellHelper]::ILCreateFromPath($path)
+    try {
+        if ($pidl -ne [IntPtr]::Zero) {
+            $flags = 0x0000 -bor 0x1000 # SHCNF_IDLIST | SHCNF_FLUSH
+            [ShellHelper]::SHChangeNotify(0x00002000, $flags, $pidl, [IntPtr]::Zero) # SHCNE_UPDATEITEM
+            [ShellHelper]::SHChangeNotify(0x00001000, $flags, $pidl, [IntPtr]::Zero) # SHCNE_UPDATEDIR
+        }
+    } finally {
+        if ($pidl -ne [IntPtr]::Zero) { [ShellHelper]::CoTaskMemFree($pidl) }
+    }
 }
-`
-        : `
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public class Shell32 {
-    [DllImport("shell32.dll")]
-    public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
-}
-"@
-[Shell32]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
+
+# 无论是否有具体路径，都发送关联变更通知，强制刷新全局图标缓存
+[ShellHelper]::SHChangeNotify(0x08000000, 0x1000, [IntPtr]::Zero, [IntPtr]::Zero) # SHCNE_ASSOCCHANGED | SHCNF_FLUSH
 `
       tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-refresh-'))
       scriptPath = path.join(tmpDir, 'refresh.ps1')
@@ -268,11 +320,15 @@ public class Shell32 {
     // 如果 PowerShell 方法失败，回退到 ie4uinit
   }
 
-  // 方法2: 使用 ie4uinit 清除图标缓存（作为备用）
-  const sysRoot = process.env.SystemRoot || 'C:\\Windows'
+  // 方法2: 使用 ie4uinit 强制刷新图标缓存（作为备用）
+  const sysRoot = process.env.SystemRoot || 'C\\Windows'
   const ie4u = path.join(sysRoot, 'System32', 'ie4uinit.exe')
   if (fs.existsSync(ie4u)) {
-    try { execFileSync(ie4u, ['-ClearIconCache'], { windowsHide: true, timeout: 5000 }) } catch {}
+    try {
+      // 优先使用 -show（Win10/11 效果更好），失败则退回 -ClearIconCache
+      try { execFileSync(ie4u, ['-show'], { windowsHide: true, timeout: 5000 }) }
+      catch { try { execFileSync(ie4u, ['-ClearIconCache'], { windowsHide: true, timeout: 5000 }) } catch {} }
+    } catch {}
   }
 }
 
@@ -398,16 +454,77 @@ app.whenReady().then(() => {
   ipcMain.handle('apply-icon', async (_e, folder, icon) => {
     if (!folder || !icon) return false
     const copied = copyIconToFolder(folder, icon)
-    const rel = path.basename(copied)
-    const okIni = ensureDesktopIni(folder, rel)
+    // 使用绝对路径而不是相对路径！
+    const okIni = await ensureDesktopIni(folder, copied)
     if (!okIni) return false
     setFolderAttributes(folder)
     refreshIconCache(folder)
     return true
   })
 
+  // 批量应用图标（不立即刷新缓存，提升性能）
+  ipcMain.handle('apply-icon-batch', async (_e, items) => {
+    if (!Array.isArray(items) || items.length === 0) return { ok: false, results: [] }
+    const results = []
+    for (const { folder, icon } of items) {
+      try {
+        if (!folder || !icon) {
+          results.push({ folder, ok: false })
+          continue
+        }
+        const copied = copyIconToFolder(folder, icon)
+        const okIni = await ensureDesktopIni(folder, copied)
+        if (!okIni) {
+          results.push({ folder, ok: false })
+          continue
+        }
+        setFolderAttributes(folder)
+        // 注意：这里不调用 refreshIconCache，等批量完成后统一刷新
+        results.push({ folder, ok: true })
+      } catch (err) {
+        results.push({ folder, ok: false })
+      }
+    }
+    // 批量完成后，只刷新一次全局图标缓存
+    refreshIconCache()
+    return { ok: true, results }
+  })
+
   ipcMain.handle('restore-icon', async (_e, folder) => {
     return restoreFolderIcon(folder)
+  })
+
+  // 批量还原图标（不立即刷新缓存，提升性能）
+  ipcMain.handle('restore-icon-batch', async (_e, folders) => {
+    if (!Array.isArray(folders) || folders.length === 0) return { ok: false, results: [] }
+    const results = []
+    for (const folder of folders) {
+      try {
+        if (!folder) {
+          results.push({ folder, ok: false })
+          continue
+        }
+        // 删除 desktop.ini
+        const iniPath = path.join(folder, 'desktop.ini')
+        try {
+          if (fs.existsSync(iniPath)) {
+            execFileSync('attrib', ['-h', '-s', '-r', iniPath])
+            fs.unlinkSync(iniPath)
+          }
+        } catch {}
+        // 清理所有图标文件
+        clearOldIconFiles(folder)
+        // 移除文件夹的系统和只读属性
+        try { execFileSync('attrib', ['-s', '-r', folder]) } catch {}
+        // 注意：这里不调用 refreshIconCache
+        results.push({ folder, ok: true })
+      } catch (err) {
+        results.push({ folder, ok: false })
+      }
+    }
+    // 批量完成后，只刷新一次全局图标缓存
+    refreshIconCache()
+    return { ok: true, results }
   })
 
   ipcMain.handle('apply-shortcut-icon', async (_e, lnk, icon) => {
