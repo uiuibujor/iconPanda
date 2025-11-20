@@ -263,64 +263,22 @@ function deleteShortcutFile(lnkPath) {
 }
 
 function refreshIconCache(folderPath = null) {
-  // 方法1: 使用 SHChangeNotify + PIDL + 同步刷新 + 广播消息，尽量做到立即刷新
+  // 优先使用原生 C++ 模块刷新 Windows 图标缓存，然后再作为备用调用 ie4uinit
   try {
-    let tmpDir = null
-    let scriptPath = null
-    try {
-      const escapedPath = folderPath ? folderPath.replace(/\\/g, '\\\\').replace(/"/g, '`"') : ''
-      const psScript = `
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-
-public static class ShellHelper {
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    public static extern IntPtr ILCreateFromPath(string pszPath);
-
-    [DllImport("shell32.dll", SetLastError = true)]
-    public static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
-
-    [DllImport("ole32.dll")]
-    public static extern void CoTaskMemFree(IntPtr pv);
-}
-"@
-
-$path = "${escapedPath}"
-$pidl = [IntPtr]::Zero
-
-if (-not [string]::IsNullOrWhiteSpace($path)) {
-    $pidl = [ShellHelper]::ILCreateFromPath($path)
-    try {
-        if ($pidl -ne [IntPtr]::Zero) {
-            $flags = 0x0000 -bor 0x1000 # SHCNF_IDLIST | SHCNF_FLUSH
-            [ShellHelper]::SHChangeNotify(0x00002000, $flags, $pidl, [IntPtr]::Zero) # SHCNE_UPDATEITEM
-            [ShellHelper]::SHChangeNotify(0x00001000, $flags, $pidl, [IntPtr]::Zero) # SHCNE_UPDATEDIR
-        }
-    } finally {
-        if ($pidl -ne [IntPtr]::Zero) { [ShellHelper]::CoTaskMemFree($pidl) }
-    }
-}
-
-# 无论是否有具体路径，都发送关联变更通知，强制刷新全局图标缓存
-[ShellHelper]::SHChangeNotify(0x08000000, 0x1000, [IntPtr]::Zero, [IntPtr]::Zero) # SHCNE_ASSOCCHANGED | SHCNF_FLUSH
-`
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-refresh-'))
-      scriptPath = path.join(tmpDir, 'refresh.ps1')
-      fs.writeFileSync(scriptPath, psScript, { encoding: 'utf8' })
-      execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], {
-        windowsHide: true,
-        timeout: 5000
-      })
-    } finally {
-      try { if (scriptPath) fs.unlinkSync(scriptPath) } catch {}
-      try { if (tmpDir) fs.rmdirSync(tmpDir) } catch {}
+    if (nativeModule && nativeModule.isNativeModuleAvailable && nativeModule.isNativeModuleAvailable()) {
+      if (folderPath && typeof folderPath === 'string') {
+        nativeModule.refreshIconCache(folderPath)
+      } else {
+        nativeModule.refreshIconCache()
+      }
+    } else {
+      console.error('Native module not available, skip native refreshIconCache')
     }
   } catch (err) {
-    // 如果 PowerShell 方法失败，回退到 ie4uinit
+    console.error('refreshIconCache native failed:', err)
   }
 
-  // 方法2: 使用 ie4uinit 强制刷新图标缓存（作为备用）
+  // 作为备用：使用 ie4uinit 强制刷新图标缓存
   const sysRoot = process.env.SystemRoot || 'C\\Windows'
   const ie4u = path.join(sysRoot, 'System32', 'ie4uinit.exe')
   if (fs.existsSync(ie4u)) {
@@ -561,50 +519,124 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-folder-preview', async (_e, folderPath) => {
     try {
-      if (!folderPath) return { ok: false }
+      console.log('[IPC] get-folder-preview start', { folderPath })
+      if (!folderPath) {
+        console.warn('[IPC] get-folder-preview: folderPath is empty')
+        return { ok: false }
+      }
       const exists = fs.existsSync(folderPath)
+      console.log('[IPC] get-folder-preview: folder exists =', exists)
       if (!exists) return { ok: false }
+
       const desktopIni = path.join(folderPath, 'desktop.ini')
       const hasDesktopIni = fs.existsSync(desktopIni)
       const folderIco = path.join(folderPath, '.folder.ico')
       const hasFolderIco = fs.existsSync(folderIco)
+      console.log('[IPC] get-folder-preview:', { hasDesktopIni, hasFolderIco, desktopIni, folderIco })
+
       let iconFile = ''
       if (hasFolderIco) {
         iconFile = folderIco
-      } else if (hasDesktopIni) {
+        console.log('[IPC] get-folder-preview: using .folder.ico', iconFile)
+      } else {
+        // 1) 优先在目录里直接找我们自己生成的 folder_*.ico，避免受 desktop.ini 编码影响
         try {
-          const ini = fs.readFileSync(desktopIni, { encoding: 'utf8' })
-          const match = ini.match(/IconFile\s*=\s*(.*)/i)
-          if (match && match[1]) {
-            const raw = match[1].trim()
-            iconFile = path.isAbsolute(raw) ? raw : path.join(folderPath, raw)
+          const files = fs.readdirSync(folderPath)
+          const folderIcons = files
+            .filter((f) => /^folder(_\d+)?\.ico$/i.test(f))
+            .map((f) => {
+              const full = path.join(folderPath, f)
+              let mtime = 0
+              try { mtime = fs.statSync(full).mtimeMs || 0 } catch {}
+              return { full, mtime }
+            })
+            .sort((a, b) => b.mtime - a.mtime)
+
+          if (folderIcons.length > 0) {
+            iconFile = folderIcons[0].full
+            console.log('[IPC] get-folder-preview: using folder_*.ico', iconFile)
+          } else {
+            console.log('[IPC] get-folder-preview: no folder_*.ico found in folder')
           }
-          if (!iconFile) {
-            const rmatch = ini.match(/IconResource\s*=\s*(.*)/i)
-            if (rmatch && rmatch[1]) {
-              const rawr = rmatch[1].trim()
-              const first = rawr.split(',')[0].trim()
-              const cleaned = first.replace(/^"(.*)"$/, '$1')
-              iconFile = path.isAbsolute(cleaned) ? cleaned : path.join(folderPath, cleaned)
+        } catch (err) {
+          console.error('[IPC] get-folder-preview: scan folder_*.ico failed', err)
+        }
+
+        // 2) 如果目录里也没找到图标文件，再尝试解析 desktop.ini（兼容旧数据/外部设置）
+        if (!iconFile && hasDesktopIni) {
+          try {
+            const buf = fs.readFileSync(desktopIni)
+            console.log('[IPC] get-folder-preview: desktop.ini size =', buf.length)
+            let ini = ''
+            if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+              console.log('[IPC] get-folder-preview: detected UTF-16 LE BOM')
+              ini = buf.subarray(2).toString('utf16le')
+            } else if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+              console.log('[IPC] get-folder-preview: detected UTF-8 BOM')
+              ini = buf.subarray(3).toString('utf8')
+            } else {
+              console.log('[IPC] get-folder-preview: no BOM, assume UTF-8 (ANSI 中文可能会乱码，仅作兼容)')
+              ini = buf.toString('utf8')
             }
+            console.log('[IPC] get-folder-preview: desktop.ini content preview:', ini.substring(0, 200))
+
+            const match = ini.match(/IconFile\s*=\s*(.*)/i)
+            if (match && match[1]) {
+              const raw = match[1].trim()
+              console.log('[IPC] get-folder-preview: IconFile raw =', raw)
+              iconFile = path.isAbsolute(raw) ? raw : path.join(folderPath, raw)
+            }
+            if (!iconFile) {
+              const rmatch = ini.match(/IconResource\s*=\s*(.*)/i)
+              if (rmatch && rmatch[1]) {
+                const rawr = rmatch[1].trim()
+                const first = rawr.split(',')[0].trim()
+                const cleaned = first.replace(/^"(.*)"$/, '$1')
+                console.log('[IPC] get-folder-preview: IconResource raw =', rawr, 'cleaned =', cleaned)
+                iconFile = path.isAbsolute(cleaned) ? cleaned : path.join(folderPath, cleaned)
+              }
+            }
+          } catch (err) {
+            console.error('[IPC] get-folder-preview: error reading/parsing desktop.ini', err)
           }
-        } catch {}
+        }
       }
+
+      console.log('[IPC] get-folder-preview: final iconFile =', iconFile)
+
       let dataUrl = ''
-      if (iconFile && fs.existsSync(iconFile)) {
-        try {
-          const buf = fs.readFileSync(iconFile)
-          dataUrl = `data:image/x-icon;base64,${buf.toString('base64')}`
-        } catch {}
+      if (iconFile) {
+        const iconExists = fs.existsSync(iconFile)
+        console.log('[IPC] get-folder-preview: icon exists =', iconExists, 'iconFile =', iconFile)
+        if (iconExists) {
+          try {
+            const buf = fs.readFileSync(iconFile)
+            dataUrl = `data:image/x-icon;base64,${buf.toString('base64')}`
+            console.log('[IPC] get-folder-preview: icon size =', buf.length, 'dataUrl length =', dataUrl.length)
+          } catch (err) {
+            console.error('[IPC] get-folder-preview: error reading icon file', err)
+          }
+        }
       }
-      return {
+
+      const result = {
         ok: true,
         hasDesktopIni,
         hasFolderIco,
         iconPath: iconFile,
         iconDataUrl: dataUrl
       }
-    } catch {
+      console.log('[IPC] get-folder-preview: result summary', {
+        ok: result.ok,
+        hasDesktopIni: result.hasDesktopIni,
+        hasFolderIco: result.hasFolderIco,
+        iconPath: result.iconPath,
+        hasDataUrl: !!result.iconDataUrl,
+        dataUrlLength: result.iconDataUrl ? result.iconDataUrl.length : 0
+      })
+      return result
+    } catch (err) {
+      console.error('[IPC] get-folder-preview: unexpected error', err)
       return { ok: false }
     }
   })

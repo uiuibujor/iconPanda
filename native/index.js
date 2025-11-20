@@ -77,6 +77,25 @@ async function clearFolderIcon(folderPath) {
 }
 
 /**
+ * 刷新图标缓存（可选指定单个文件夹路径）
+ * 直接调用 C++ 原生模块，使用 Windows Shell API
+ * @param {string|null} [folderPath]
+ * @returns {boolean}
+ */
+function refreshIconCache(folderPath = null) {
+  if (!nativeModule) {
+    throw new Error('Native module not loaded. Please run: npm run rebuild');
+  }
+
+  if (typeof folderPath === 'string' && folderPath.trim().length > 0) {
+    const absFolder = path.resolve(folderPath);
+    return nativeModule.refreshIconCache(absFolder);
+  }
+
+  return nativeModule.refreshIconCache();
+}
+
+/**
  * 检查原生模块是否可用
  * @returns {boolean}
  */
@@ -87,6 +106,7 @@ function isNativeModuleAvailable() {
 module.exports = {
   setFolderIcon,
   clearFolderIcon,
+  refreshIconCache,
   isNativeModuleAvailable
 };
 

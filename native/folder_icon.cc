@@ -130,12 +130,46 @@ Napi::Value ClearFolderIcon(const Napi::CallbackInfo& info) {
     return Napi::Boolean::New(env, true);
 }
 
+// 刷新图标缓存（可选指定单个文件夹路径）
+Napi::Value RefreshIconCache(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+
+    std::wstring folderPath;
+    bool hasFolderPath = false;
+
+    if (info.Length() >= 1 && info[0].IsString()) {
+        std::u16string folderPathU16 = info[0].As<Napi::String>().Utf16Value();
+        if (!folderPathU16.empty()) {
+            folderPath.assign(folderPathU16.begin(), folderPathU16.end());
+            hasFolderPath = true;
+        }
+    }
+
+    // 方法1：使用 ILCreateFromPath + SHChangeNotify 尝试立即刷新指定路径
+    if (hasFolderPath) {
+        PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(folderPath.c_str());
+        if (pidl != nullptr) {
+            UINT flags = SHCNF_IDLIST | SHCNF_FLUSH;
+            SHChangeNotify(SHCNE_UPDATEITEM, flags, pidl, nullptr);
+            SHChangeNotify(SHCNE_UPDATEDIR, flags, pidl, nullptr);
+            CoTaskMemFree(pidl);
+        }
+    }
+
+    // 方法2：无论是否有具体路径，都发送关联变更通知，强制刷新全局图标缓存
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_FLUSH, nullptr, nullptr);
+
+    return Napi::Boolean::New(env, true);
+}
+
 // 模块初始化
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set(Napi::String::New(env, "setFolderIcon"),
                 Napi::Function::New(env, SetFolderIcon));
     exports.Set(Napi::String::New(env, "clearFolderIcon"),
                 Napi::Function::New(env, ClearFolderIcon));
+    exports.Set(Napi::String::New(env, "refreshIconCache"),
+                Napi::Function::New(env, RefreshIconCache));
     return exports;
 }
 
